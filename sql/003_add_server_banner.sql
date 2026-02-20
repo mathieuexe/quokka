@@ -1,2 +1,0 @@
-ALTER TABLE servers
-ADD COLUMN IF NOT EXISTS banner_url TEXT;
