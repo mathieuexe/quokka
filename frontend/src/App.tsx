@@ -50,7 +50,7 @@ export default function App(): JSX.Element {
     "Inscrivez-vous à la bêta publique sur notre serveur Stoat afin de nous faire part de vos retours et améliorer la plateforme.";
 
   useEffect(() => {
-    const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
+    const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
 
     let cancelled = false;
     void fetch(`${API_URL}/maintenance`)
