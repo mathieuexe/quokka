@@ -17,8 +17,24 @@ import { maintenanceGuard } from "./middleware/maintenance.js";
 
 export const app = express();
 
+const allowedOrigins = [
+  env.CORS_ORIGIN,
+  env.CORS_ORIGIN.replace("https://www.", "https://"),
+  `https://www.${env.CORS_ORIGIN.replace("https://", "")}`,
+].filter(Boolean);
+
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN }));
+app.use(cors({ 
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked: ${origin}`));
+    }
+  },
+  credentials: true
+}));
+
 app.post("/api/payments/webhook", express.raw({ type: "application/json" }), stripeWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(maintenanceGuard);
