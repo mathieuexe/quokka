@@ -31,6 +31,22 @@ SUBMISSION_CHANNEL_ID = os.getenv('SUBMISSION_CHANNEL_ID')
 MODERATOR_ROLE_1 = os.getenv('MODERATOR_ROLE_1')
 MODERATOR_ROLE_2 = os.getenv('MODERATOR_ROLE_2')
 MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
+DEFAULT_NOTIFICATION_CHANNEL_ID = "01KHCH5Y324FH1HP45S6JZJ1H4"
+NOTIFICATION_CHANNEL_ID = os.getenv('NOTIFICATION_CHANNEL_ID') or WELCOME_CHANNEL_ID or LEAVE_CHANNEL_ID or DEFAULT_NOTIFICATION_CHANNEL_ID
+GRADIENT_ROLE_ID = os.getenv('GRADIENT_ROLE_ID') or MODERATOR_ROLE_1 or "01KHCAJ20T9SATYM1PDTYXKZ61"
+GRADIENT_COLORS = [
+    "#c00000",
+    "#c70714",
+    "#ce0f28",
+    "#d5163c",
+    "#dc1d50",
+    "#e32563",
+    "#ea2c77",
+    "#f1338b",
+    "#f83b9f",
+    "#ff42b3"
+]
+GRADIENT_STEPS = 8
 
 # Charger la configuration JSON (optionnel)
 try:
@@ -465,12 +481,77 @@ def is_bot_mentioned(message, bot_id):
     content_lower = message.content.lower()
     if content_lower.startswith(f"<@{bot_id}>") or content_lower.startswith(f"<@!{bot_id}>"):
         return True
-    
-    # Vérifier si le message contient "quokka" ou le nom du bot
-    if "quokka" in content_lower or "bot" in content_lower:
-        return True
-    
     return False
+
+async def apply_role_gradient():
+    if not SERVER_ID or not GRADIENT_ROLE_ID:
+        print('[GRADIENT] Configuration manquante.')
+        return
+    colors = GRADIENT_COLORS[:GRADIENT_STEPS]
+    if not colors:
+        print('[GRADIENT] Aucune couleur définie.')
+        return
+    try:
+        server = await client.fetch_server(SERVER_ID)
+    except Exception as e:
+        print(f'[GRADIENT] Impossible de récupérer le serveur: {e}')
+        return
+    bot_top_rank = None
+    bot_member = None
+    try:
+        bot_member = await server.fetch_member(client.user.id)
+        if bot_member is not None and hasattr(bot_member, 'top_role') and bot_member.top_role is not None:
+            bot_top_rank = bot_member.top_role.rank
+    except Exception as e:
+        print(f'[GRADIENT] Impossible de récupérer le rôle du bot: {e}')
+    roles = list(server.roles.values()) if hasattr(server, 'roles') and server.roles else []
+    roles_sorted = sorted(roles, key=lambda role: role.rank) if roles else []
+    if bot_top_rank is None and bot_member is not None and hasattr(bot_member, 'role_ids'):
+        role_ranks = [server.roles[role_id].rank for role_id in bot_member.role_ids if role_id in server.roles]
+        if role_ranks:
+            bot_top_rank = min(role_ranks)
+    if bot_top_rank is None:
+        print('[GRADIENT] Impossible de déterminer le rang du bot.')
+        return
+    start_index = None
+    for index, role in enumerate(roles_sorted):
+        if role.id == GRADIENT_ROLE_ID:
+            start_index = index
+            break
+    if start_index is None:
+        try:
+            role = await server.fetch_role(GRADIENT_ROLE_ID)
+        except Exception as e:
+            print(f'[GRADIENT] Rôle introuvable: {e}')
+            return
+        try:
+            if bot_top_rank is not None and role.rank <= bot_top_rank:
+                print(f'[GRADIENT] Rôle ignoré (rang supérieur ou égal au bot): {role.name}.')
+                return
+            await role.edit(color=colors[0])
+            print(f'[GRADIENT] Couleur appliquée au rôle {role.name}.')
+        except Exception as e:
+            print(f'[GRADIENT] Échec modification rôle: {e}')
+        return
+    if roles_sorted[start_index].rank <= bot_top_rank:
+        print('[GRADIENT] Rôle cible au-dessus ou égal au bot. Dégradé annulé.')
+        return
+    updated = 0
+    skipped = 0
+    for offset, color in enumerate(colors):
+        target_index = start_index + offset
+        if target_index >= len(roles_sorted):
+            break
+        target_role = roles_sorted[target_index]
+        if bot_top_rank is not None and target_role.rank <= bot_top_rank:
+            skipped += 1
+            continue
+        try:
+            await target_role.edit(color=color)
+            updated += 1
+        except Exception as e:
+            print(f'[GRADIENT] Échec pour {target_role.name}: {e}')
+    print(f'[GRADIENT] Rôles mis à jour: {updated} (ignorés: {skipped})')
 
 
 # ============================================================================
@@ -484,8 +565,7 @@ async def on_ready(event, /):
     print(f'[OK] Bot connecté: {event.me.tag}')
     print(f'[INFO] ID: {event.me.id}')
     print(f'[INFO] Serveur: {SERVER_ID}')
-    print(f'[INFO] Canal bienvenue: {WELCOME_CHANNEL_ID}')
-    print(f'[INFO] Canal départ: {LEAVE_CHANNEL_ID}')
+    print(f'[INFO] Canal notifications: {NOTIFICATION_CHANNEL_ID}')
     print(f'[INFO] Canal soumission: {SUBMISSION_CHANNEL_ID}')
     print(f'[INFO] Rôle modérateur 1: {MODERATOR_ROLE_1}')
     print(f'[INFO] Rôle modérateur 2: {MODERATOR_ROLE_2}')
@@ -502,6 +582,7 @@ async def on_ready(event, /):
     print('[ATTENTION] Envoyez un message dans le canal de soumission')
     print(f'            pour tester le système de modération!')
     print('=' * 60)
+    await apply_role_gradient()
 
 
 @client.on(stoat.ServerMemberJoinEvent)
@@ -518,7 +599,7 @@ async def on_member_join(event, /):
         print(f'[BIENVENUE] Nouveau membre: {member.name}')
         
         # Récupérer le canal
-        channel = await client.fetch_channel(WELCOME_CHANNEL_ID)
+        channel = await client.fetch_channel(NOTIFICATION_CHANNEL_ID)
         
         # Message de bienvenue
         welcome_message = (
@@ -541,24 +622,32 @@ async def on_member_remove(event, /):
     try:
         member = event.member
         
-        # Vérifier le serveur
-        if hasattr(member, 'server') and hasattr(member.server, 'id'):
-            if member.server.id != SERVER_ID:
-                return
+        if event.server_id != SERVER_ID:
+            return
         
-        print(f'[DÉPART] Membre parti: {member.name}')
+        display_name = member.name if member else f"<@{event.user_id}>"
+        mention = member.mention if member and hasattr(member, 'mention') else f"<@{event.user_id}>"
+        reason = event.reason
         
-        # Récupérer le canal de départ (même que bienvenue dans ce cas)
-        channel = await client.fetch_channel(LEAVE_CHANNEL_ID)
+        if reason == stoat.MemberRemovalIntention.kick:
+            title = f"👢 **{display_name}** a été kick du serveur."
+            details = "Le membre a été retiré par un modérateur."
+        elif reason == stoat.MemberRemovalIntention.ban:
+            title = f"🔨 **{display_name}** a été banni du serveur."
+            details = "Le membre a été banni par un modérateur."
+        else:
+            title = f"👋 **{display_name}** a quitté le serveur."
+            details = "Nous le remercions pour le temps passé avec nous et lui souhaitons le meilleur."
         
-        # Message de départ - différent du message de bienvenue
         leave_message = (
-            f"👋 **{member.name}** a quitté le serveur.\n\n"
-            f"Nous le remercions pour le temps passé avec nous et lui souhaitons le meilleur pour ses projets futurs!"
+            f"{title}\n\n"
+            f"{details}\n"
+            f"{mention}"
         )
         
+        channel = await client.fetch_channel(NOTIFICATION_CHANNEL_ID)
         await channel.send(leave_message)
-        print(f'[OK] Message de départ envoyé pour {member.name}')
+        print(f'[OK] Message de départ envoyé pour {display_name}')
         
     except Exception as e:
         print(f'[ERREUR] Départ: {e}')
@@ -604,7 +693,7 @@ async def on_message(event, /):
         return
     
     # Vérifier si le bot est mentionné ou si on pose une question
-    if is_bot_mentioned(message, client.user.id) or "quokka" in message.content.lower():
+    if is_bot_mentioned(message, client.user.id):
         print(f'[AI] Question détectée de {message.author.name}')
         
         # Extraire la question (enlever la mention du bot)
@@ -645,7 +734,7 @@ async def on_message(event, /):
             "• `!ping` - Vérifier le statut du bot\n"
             "• `!aide` / `!help` - Afficher cette aide\n"
             "• `!moderation` - Informations sur la modération\n"
-            "• Mentionnez le bot ou dites 'quokka' pour une réponse IA\n\n"
+            "• Mentionnez le bot pour une réponse IA\n\n"
             "**Modérateurs uniquement:**\n"
             "• `!clear <nombre>` - Supprimer des messages (max 100)\n"
             "  Exemple: `!clear 10`\n\n"
@@ -1315,8 +1404,8 @@ def validate_config():
         errors.append('BOT_TOKEN non défini')
     if not SERVER_ID:
         errors.append('SERVER_ID non défini')
-    if not WELCOME_CHANNEL_ID:
-        errors.append('WELCOME_CHANNEL_ID non défini')
+    if not NOTIFICATION_CHANNEL_ID:
+        errors.append('NOTIFICATION_CHANNEL_ID non défini')
     if not SUBMISSION_CHANNEL_ID:
         errors.append('SUBMISSION_CHANNEL_ID non défini')
     
