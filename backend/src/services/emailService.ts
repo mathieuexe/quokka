@@ -1,7 +1,17 @@
 import { Resend } from "resend";
 import { env } from "../config/env.js";
 
-const resend = new Resend(env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient(): Resend {
+  if (!env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+  if (!resendClient) {
+    resendClient = new Resend(env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
 
 export type EmailTemplate = {
   to: string;
@@ -14,9 +24,8 @@ export async function sendEmail(template: EmailTemplate): Promise<void> {
     console.log(`Attempting to send email to: ${template.to}`);
     console.log(`Subject: ${template.subject}`);
     
-    // Try to send with the configured domain first
     try {
-      const result = await resend.emails.send({
+      const result = await getResendClient().emails.send({
         from: "Quokka <noreply@quokka.gg>",
         to: template.to,
         subject: template.subject,
@@ -27,12 +36,11 @@ export async function sendEmail(template: EmailTemplate): Promise<void> {
     } catch (domainError: any) {
       console.error(`Error with quokka.gg domain:`, domainError.message);
       
-      // If domain verification fails, fall back to resend.dev domain
       if (domainError?.message?.includes('domain') || domainError?.statusCode === 403 || domainError?.status === 403) {
         console.warn("Domain quokka.gg not verified, falling back to resend.dev");
         
         try {
-          const fallbackResult = await resend.emails.send({
+          const fallbackResult = await getResendClient().emails.send({
             from: "Quokka <onboarding@resend.dev>",
             to: template.to,
             subject: template.subject,
