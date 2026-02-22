@@ -602,6 +602,26 @@ a {
   margin-top: 0.25rem;
 }
 
+.auth-discord-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #5865f2;
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.auth-discord-btn:hover {
+  background: #4b59e6;
+  color: #ffffff;
+}
+
+.auth-discord-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .auth-switch-link {
   margin: 0.2rem 0 0;
   color: var(--muted);

@@ -114,12 +114,6 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
               <NavLink to="/login" onClick={closeMenus} className="site-header-auth-link">
                 {t("auth.login")}
               </NavLink>
-              <NavLink to="/register" onClick={closeMenus} className="site-header-auth-cta">
-                {t("auth.register")}
-              </NavLink>
-              <a href={`${API_URL}/auth/discord`} onClick={closeMenus} className="site-header-auth-discord">
-                Se connecter via Discord
-              </a>
             </div>
           )}
 
@@ -162,12 +156,6 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
                   <NavLink to="/login" onClick={closeMenus} className="site-header-mobile-auth-link">
                     {t("auth.login")}
                   </NavLink>
-                  <NavLink to="/register" onClick={closeMenus} className="site-header-mobile-auth-cta">
-                    {t("auth.register")}
-                  </NavLink>
-                  <a href={`${API_URL}/auth/discord`} onClick={closeMenus} className="site-header-mobile-auth-discord">
-                    Se connecter via Discord
-                  </a>
                 </div>
               )}
             </div>
