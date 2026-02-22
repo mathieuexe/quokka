@@ -5,8 +5,6 @@ import { useTranslation } from "react-i18next";
 import { apiRequest } from "../lib/api";
 import type { User } from "../types";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
-
 type AuthResponse = {
   token?: string;
   user?: User;
@@ -65,6 +63,12 @@ export function LoginPage(): JSX.Element {
 
         <form className="card form auth-form-card" onSubmit={onSubmit}>
           <h2>{t("auth.loginButton")}</h2>
+          <div className="auth-info-box">
+            <p>
+              L’inscription et la connexion via Discord ou Stoat seront bientôt disponibles et sont en cours de
+              développement. Merci pour votre patience.
+            </p>
+          </div>
           <label>
             {t("auth.email")}
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
@@ -77,10 +81,6 @@ export function LoginPage(): JSX.Element {
           <button className="btn auth-submit-btn" type="submit" disabled={pending}>
             {pending ? t("common.loading") : t("auth.loginButton")}
           </button>
-          <a href={`${API_URL}/auth/discord`} className="btn auth-discord-btn">
-            <img className="auth-discord-icon" src="/images/icons/discord.png" alt="" aria-hidden="true" />
-            <span>Se connecter via Discord</span>
-          </a>
           <p className="auth-switch-link">
             {t("auth.noAccount")} <Link to="/register">{t("auth.register")}</Link>
           </p>

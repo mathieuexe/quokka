@@ -17,6 +17,22 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 }
 
+export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+
+  const token = header.slice("Bearer ".length);
+  try {
+    req.user = verifyAccessToken(token);
+  } catch {
+    req.user = undefined;
+  }
+  next();
+}
+
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   if (req.user?.role !== "admin") {
     res.status(403).json({ message: "Accès administrateur requis." });

@@ -72,6 +72,17 @@ type PublicProfileResponse = {
   servers: Array<{ id: string; name: string; category_label: string; created_at: string; premium_type: string | null }>;
 };
 
+const GUEST_STORAGE_KEY = "chat_guest_pseudo";
+
+function createGuestPseudo(): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let suffix = "";
+  for (let i = 0; i < 6; i += 1) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return `Guest_${suffix}`;
+}
+
 export function ChatPage(): JSX.Element {
   const { token, isAuthenticated, user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -95,6 +106,7 @@ export function ChatPage(): JSX.Element {
   const [userSuggestionQuery, setUserSuggestionQuery] = useState("");
   const [userSuggestionSelectedIndex, setUserSuggestionSelectedIndex] = useState(0);
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
+  const [guestPseudo, setGuestPseudo] = useState<string | null>(null);
 
   const lastCreatedAt = useMemo(() => (messages.length ? messages[messages.length - 1].created_at : null), [messages]);
 
@@ -169,6 +181,25 @@ export function ChatPage(): JSX.Element {
     }
     void loadInitial();
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setGuestPseudo(null);
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(GUEST_STORAGE_KEY);
+      if (stored && /^Guest_[A-Za-z0-9]{1,6}$/.test(stored)) {
+        setGuestPseudo(stored);
+        return;
+      }
+      const created = createGuestPseudo();
+      localStorage.setItem(GUEST_STORAGE_KEY, created);
+      setGuestPseudo(created);
+    } catch {
+      setGuestPseudo(createGuestPseudo());
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (loading) return;
@@ -308,10 +339,15 @@ export function ChatPage(): JSX.Element {
   async function sendCurrentMessage(): Promise<void> {
     const normalized = text.trim();
     if (!normalized) return;
-    if (!token) return;
     if (cooldownRemainingMs > 0) return;
 
+    const hasToken = Boolean(token);
+
     if (normalized === "/clear") {
+      if (!hasToken) {
+        setError("Commande réservée aux administrateurs.");
+        return;
+      }
       if (user?.role !== "admin") {
         setError("Commande réservée aux administrateurs.");
         return;
@@ -332,6 +368,10 @@ export function ChatPage(): JSX.Element {
     }
 
     if (normalized === "/maintenance-on" || normalized === "/maintenance-off") {
+      if (!hasToken) {
+        setError("Commande réservée aux administrateurs.");
+        return;
+      }
       if (user?.role !== "admin") {
         setError("Commande réservée aux administrateurs.");
         return;
@@ -363,6 +403,10 @@ export function ChatPage(): JSX.Element {
     }
 
     if (normalized === "/cassier") {
+      if (!hasToken) {
+        setError("Commande réservée aux administrateurs.");
+        return;
+      }
       setSending(true);
       setError(null);
       try {
@@ -434,6 +478,10 @@ export function ChatPage(): JSX.Element {
 
     // Handle moderation commands
     if (normalized.startsWith("/ban ") || normalized.startsWith("/unban ") || normalized.startsWith("/mute ") || normalized.startsWith("/unmute ") || normalized.startsWith("/warn ") || normalized.startsWith("/warnings ")) {
+      if (!hasToken) {
+        setError("Commande réservée aux administrateurs.");
+        return;
+      }
       if (user?.role !== "admin") {
         setError("Commande réservée aux administrateurs.");
         return;
@@ -594,10 +642,24 @@ export function ChatPage(): JSX.Element {
     setSending(true);
     setError(null);
     try {
+      let guestName = guestPseudo;
+      if (!hasToken) {
+        if (!guestName) {
+          const created = createGuestPseudo();
+          try {
+            localStorage.setItem(GUEST_STORAGE_KEY, created);
+          } catch {}
+          setGuestPseudo(created);
+          guestName = created;
+        }
+      }
       const created = await apiRequest<{ message: ChatMessage }>("/chat/messages", {
         method: "POST",
-        token,
-        body: { message: normalized }
+        token: hasToken ? token : undefined,
+        body: {
+          message: normalized,
+          ...(guestName ? { guestPseudo: guestName } : {})
+        }
       });
       setText("");
       setMessages((current) => {
@@ -616,7 +678,7 @@ export function ChatPage(): JSX.Element {
   const cooldownSeconds = Math.ceil(cooldownRemainingMs / 1000);
   const isAdmin = user?.role === "admin";
   const canUseCommands = isAuthenticated && Boolean(token) && isAdmin;
-  const inputDisabled = !isAuthenticated || sending || cooldownRemainingMs > 0 || (!isAdmin && maintenanceEnabled);
+  const inputDisabled = sending || cooldownRemainingMs > 0 || (!isAdmin && maintenanceEnabled);
   const commandQuery = canUseCommands && text.trimStart().startsWith("/") ? text.trim() : "";
   const commandSuggestions = useMemo(() => {
     if (!commandQuery) return [];
@@ -638,6 +700,7 @@ export function ChatPage(): JSX.Element {
         <div className="chat-head-meta">
           <span className="chat-pill">{messages.length} messages</span>
           {isAuthenticated && user?.pseudo && <span className="chat-pill">Connecté : {user.pseudo}</span>}
+          {!isAuthenticated && guestPseudo && <span className="chat-pill">Invité : {guestPseudo}</span>}
         </div>
       </div>
 
@@ -747,11 +810,7 @@ export function ChatPage(): JSX.Element {
           </div>
 
           <div className="chat-compose">
-            {!isAuthenticated ? (
-              <p className="chat-login-hint">
-                <Link to="/login">Connectez-vous</Link> pour envoyer des messages.
-              </p>
-            ) : null}
+            {!isAuthenticated && guestPseudo ? <p className="chat-login-hint">Vous discutez en tant qu’invité : {guestPseudo}</p> : null}
             {isAdmin && maintenanceEnabled ? <p className="chat-maintenance-admin">Maintenance du tchat activée.</p> : null}
 
             <form
@@ -886,7 +945,7 @@ export function ChatPage(): JSX.Element {
                         void sendCurrentMessage();
                       }
                     }}
-                    placeholder={isAuthenticated ? "Écrivez votre message..." : "Connectez-vous pour écrire..."}
+                    placeholder={isAuthenticated ? "Écrivez votre message..." : "Écrivez votre message en invité..."}
                     disabled={inputDisabled}
                     rows={2}
                     maxLength={500}

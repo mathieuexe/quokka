@@ -51,9 +51,9 @@ export async function listRecentChatMessages(limit: number): Promise<ChatMessage
         SELECT
           m.id,
           m.user_id,
-          CASE WHEN m.message_type = 'system' THEN 'Système' ELSE u.pseudo END AS user_pseudo,
+          CASE WHEN m.message_type = 'system' THEN 'Système' ELSE COALESCE(u.pseudo, m.guest_pseudo) END AS user_pseudo,
           CASE WHEN m.message_type = 'system' THEN NULL ELSE u.avatar_url END AS user_avatar_url,
-          CASE WHEN m.message_type = 'system' THEN 'system' ELSE u.role END AS user_role,
+          CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role,
           m.message_type,
           m.message,
           m.created_at
@@ -76,9 +76,9 @@ export async function listChatMessagesAfter(afterIso: string, limit: number): Pr
       SELECT
         m.id,
         m.user_id,
-        CASE WHEN m.message_type = 'system' THEN 'Système' ELSE u.pseudo END AS user_pseudo,
+        CASE WHEN m.message_type = 'system' THEN 'Système' ELSE COALESCE(u.pseudo, m.guest_pseudo) END AS user_pseudo,
         CASE WHEN m.message_type = 'system' THEN NULL ELSE u.avatar_url END AS user_avatar_url,
-        CASE WHEN m.message_type = 'system' THEN 'system' ELSE u.role END AS user_role,
+        CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role,
         m.message_type,
         m.message,
         m.created_at
@@ -126,6 +126,42 @@ export async function createChatMessage(userId: string, message: string): Promis
       JOIN users u ON u.id = ins.user_id
     `,
     [userId, message]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function createGuestChatMessage(guestPseudo: string, message: string): Promise<ChatMessageRecord | null> {
+  const result = await db.query<ChatMessageRecord>(
+    `
+      WITH last_message AS (
+        SELECT created_at
+        FROM chat_messages
+        WHERE guest_pseudo = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      ),
+      ins AS (
+        INSERT INTO chat_messages (user_id, guest_pseudo, message)
+        SELECT NULL, $1, $2
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM last_message
+          WHERE NOW() - created_at < INTERVAL '5 seconds'
+        )
+        RETURNING id, user_id, guest_pseudo, message, created_at, message_type
+      )
+      SELECT
+        ins.id,
+        ins.user_id,
+        ins.guest_pseudo AS user_pseudo,
+        NULL AS user_avatar_url,
+        'user' AS user_role,
+        ins.message_type,
+        ins.message,
+        ins.created_at
+      FROM ins
+    `,
+    [guestPseudo, message]
   );
   return result.rows[0] ?? null;
 }
@@ -276,11 +312,11 @@ export async function getChatMessageById(messageId: string): Promise<ChatMessage
         m.message,
         m.message_type,
         m.created_at,
-        u.pseudo AS user_pseudo,
-        u.avatar_url AS user_avatar_url,
-        u.role AS user_role
+        CASE WHEN m.message_type = 'system' THEN 'Système' ELSE COALESCE(u.pseudo, m.guest_pseudo) END AS user_pseudo,
+        CASE WHEN m.message_type = 'system' THEN NULL ELSE u.avatar_url END AS user_avatar_url,
+        CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role
       FROM chat_messages m
-      JOIN users u ON u.id = m.user_id
+      LEFT JOIN users u ON u.id = m.user_id
       WHERE m.id = $1
       LIMIT 1
     `,
