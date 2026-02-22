@@ -43,7 +43,11 @@ function isImgurUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    return host === "imgur.com" || host.endsWith(".imgur.com");
+    const isImgurHost = host === "imgur.com" || host.endsWith(".imgur.com");
+    if (!isImgurHost) return false;
+
+    const path = parsed.pathname.toLowerCase();
+    return path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".png") || path.endsWith(".gif") || path.endsWith(".mp4");
   } catch {
     return false;
   }
@@ -116,7 +120,7 @@ export async function addServer(req: Request, res: Response): Promise<void> {
 
   const payload = addServerSchema.parse(req.body);
   if (payload.bannerUrl && !isImgurUrl(payload.bannerUrl)) {
-    res.status(400).json({ message: "La bannière doit être hébergée sur Imgur (imgur.com)." });
+    res.status(400).json({ message: "La bannière doit être hébergée sur Imgur et finir par .png, .jpg, .jpeg, .mp4 ou .gif." });
     return;
   }
 
@@ -167,7 +171,7 @@ export async function patchServer(req: Request, res: Response): Promise<void> {
 
   const payload = updateServerSchema.parse(req.body);
   if (payload.bannerUrl && !isImgurUrl(payload.bannerUrl)) {
-    res.status(400).json({ message: "La bannière doit être hébergée sur Imgur (imgur.com)." });
+    res.status(400).json({ message: "La bannière doit être hébergée sur Imgur et finir par .png, .jpg, .jpeg, .mp4 ou .gif." });
     return;
   }
 
