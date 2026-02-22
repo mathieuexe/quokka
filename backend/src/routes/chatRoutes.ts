@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { deleteChatPresenceHandler, getChatMessages, getChatOnlineUsers, getChatStatus, postChatClear, postChatMaintenance, postChatMessage, postChatPresence, deleteChatMessage } from "../controllers/chatController.js";
+import { deleteChatPresenceHandler, getChatMessages, getChatOnlineGuests, getChatOnlineUsers, getChatStatus, postChatClear, postChatMaintenance, postChatMessage, postChatPresence, deleteChatMessage } from "../controllers/chatController.js";
 import { optionalAuth, requireAdmin, requireAuth } from "../middleware/auth.js";
 import {
   banUserHandler,
@@ -22,6 +22,7 @@ chatRoutes.delete("/messages/:messageId", requireAuth, requireAdmin, deleteChatM
 chatRoutes.post("/presence", requireAuth, postChatPresence);
 chatRoutes.delete("/presence", requireAuth, deleteChatPresenceHandler);
 chatRoutes.get("/online", getChatOnlineUsers);
+chatRoutes.get("/online/guests", getChatOnlineGuests);
 chatRoutes.post("/clear", requireAuth, requireAdmin, postChatClear);
 chatRoutes.get("/status", getChatStatus);
 chatRoutes.post("/maintenance", requireAuth, requireAdmin, postChatMaintenance);

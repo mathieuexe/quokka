@@ -19,6 +19,11 @@ export type ChatOnlineUserRecord = {
   last_seen_at: string;
 };
 
+export type ChatOnlineGuestRecord = {
+  guest_pseudo: string;
+  last_seen_at: string;
+};
+
 export type ChatSettingsRecord = {
   maintenance_enabled: boolean;
   updated_at: string;
@@ -267,6 +272,26 @@ export async function listOnlineChatUsers(windowSeconds: number, limit: number):
       JOIN users u ON u.id = p.user_id
       WHERE p.last_seen_at > NOW() - make_interval(secs => $1)
       ORDER BY p.last_seen_at DESC
+      LIMIT $2
+    `,
+    [safeWindowSeconds, safeLimit]
+  );
+  return result.rows;
+}
+
+export async function listOnlineChatGuests(windowSeconds: number, limit: number): Promise<ChatOnlineGuestRecord[]> {
+  const safeWindowSeconds = Math.max(10, Math.min(10 * 60, Math.floor(windowSeconds)));
+  const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+  const result = await db.query<ChatOnlineGuestRecord>(
+    `
+      SELECT
+        m.guest_pseudo,
+        MAX(m.created_at) AS last_seen_at
+      FROM chat_messages m
+      WHERE m.guest_pseudo IS NOT NULL
+        AND m.created_at > NOW() - make_interval(secs => $1)
+      GROUP BY m.guest_pseudo
+      ORDER BY last_seen_at DESC
       LIMIT $2
     `,
     [safeWindowSeconds, safeLimit]

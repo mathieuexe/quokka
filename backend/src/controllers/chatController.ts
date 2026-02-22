@@ -11,6 +11,7 @@ import {
   getChatMessageById,
   getChatSettings,
   listChatMessagesAfter,
+  listOnlineChatGuests,
   listOnlineChatUsers,
   listRecentChatMessages,
   setChatMaintenanceEnabled,
@@ -165,6 +166,14 @@ export async function getChatOnlineUsers(req: Request, res: Response): Promise<v
   const limit = query.limit ?? 50;
   const users = await listOnlineChatUsers(windowSeconds, limit);
   res.json({ users });
+}
+
+export async function getChatOnlineGuests(req: Request, res: Response): Promise<void> {
+  const query = onlineSchema.parse(req.query);
+  const windowSeconds = query.window ?? 60;
+  const limit = query.limit ?? 50;
+  const guests = await listOnlineChatGuests(windowSeconds, limit);
+  res.json({ guests });
 }
 
 export async function postChatClear(req: Request, res: Response): Promise<void> {

@@ -44,6 +44,13 @@ type OnlineUser = {
 
 type OnlineUsersResponse = { users: OnlineUser[] };
 
+type OnlineGuest = {
+  guest_pseudo: string;
+  last_seen_at: string;
+};
+
+type OnlineGuestsResponse = { guests: OnlineGuest[] };
+
 type ChatStatusResponse = {
   maintenance_enabled: boolean;
   updated_at: string;
@@ -93,6 +100,7 @@ export function ChatPage(): JSX.Element {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [onlineGuests, setOnlineGuests] = useState<OnlineGuest[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -259,6 +267,27 @@ export function ChatPage(): JSX.Element {
         } catch {
           if (cancelled) return;
           setOnlineUsers([]);
+        }
+      })();
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const interval = window.setInterval(() => {
+      void (async () => {
+        try {
+          const data = await apiRequest<OnlineGuestsResponse>("/chat/online/guests?window=60&limit=50");
+          if (cancelled) return;
+          setOnlineGuests(data.guests);
+        } catch {
+          if (cancelled) return;
+          setOnlineGuests([]);
         }
       })();
     }, 4000);
@@ -1057,6 +1086,21 @@ export function ChatPage(): JSX.Element {
                 <span className="chat-member-name">{member.user_pseudo}</span>
                 {member.user_role === "admin" ? <span className="chat-admin-badge">ADMIN</span> : null}
               </button>
+            ))}
+          </div>
+          <div className="chat-members-head">
+            <h2>Invités en ligne actuellement</h2>
+            <span className="chat-pill">{onlineGuests.length}</span>
+          </div>
+          <div className="chat-members-list">
+            {onlineGuests.length === 0 ? <p className="chat-members-empty">Aucun invité en ligne.</p> : null}
+            {onlineGuests.map((guest) => (
+              <div key={guest.guest_pseudo} className="chat-member">
+                <span className="chat-member-avatar chat-member-avatar-fallback" aria-hidden="true">
+                  {guest.guest_pseudo.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="chat-member-name">{guest.guest_pseudo}</span>
+              </div>
             ))}
           </div>
         </aside>
