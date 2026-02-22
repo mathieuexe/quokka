@@ -68,6 +68,19 @@ export type DbUser = {
   language: string;
 };
 
+export type DiscordUserRecord = {
+  id: string;
+  user_id: string;
+  discord_id: string;
+  username: string;
+  avatar_url: string | null;
+  email: string | null;
+  locale: string | null;
+  profile: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
 export async function findUserByEmail(email: string): Promise<DbUser | null> {
   const result = await db.query<DbUser>("SELECT * FROM users WHERE email = $1 LIMIT 1", [email]);
   return result.rows[0] ?? null;
@@ -80,6 +93,20 @@ export async function findUserById(id: string): Promise<DbUser | null> {
 
 export async function findUserByPseudo(pseudo: string): Promise<DbUser | null> {
   const result = await db.query<DbUser>("SELECT * FROM users WHERE LOWER(pseudo) = LOWER($1) LIMIT 1", [pseudo]);
+  return result.rows[0] ?? null;
+}
+
+export async function findUserByDiscordId(discordId: string): Promise<DbUser | null> {
+  const result = await db.query<DbUser>(
+    `
+      SELECT u.*
+      FROM users u
+      JOIN users_discord d ON d.user_id = u.id
+      WHERE d.discord_id = $1
+      LIMIT 1
+    `,
+    [discordId]
+  );
   return result.rows[0] ?? null;
 }
 
@@ -99,6 +126,115 @@ export async function createUser(params: {
   );
 
   return result.rows[0];
+}
+
+export async function createUserFromDiscord(params: {
+  pseudo: string;
+  email: string;
+  passwordHash: string;
+  avatarUrl?: string | null;
+  emailVerified?: boolean;
+  language?: string;
+  discordId: string;
+  discordUsername: string;
+  discordAvatarUrl?: string | null;
+  discordEmail?: string | null;
+  discordLocale?: string | null;
+  discordProfile: unknown;
+}): Promise<DbUser> {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const userResult = await client.query<DbUser>(
+      `
+        INSERT INTO users (pseudo, email, password_hash, avatar_url, email_verified, language)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `,
+      [
+        params.pseudo,
+        params.email,
+        params.passwordHash,
+        params.avatarUrl ?? null,
+        params.emailVerified ?? false,
+        params.language || "fr"
+      ]
+    );
+
+    const user = userResult.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO users_discord (user_id, discord_id, username, avatar_url, email, locale, profile)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        user.id,
+        params.discordId,
+        params.discordUsername,
+        params.discordAvatarUrl ?? null,
+        params.discordEmail ?? null,
+        params.discordLocale ?? null,
+        params.discordProfile
+      ]
+    );
+
+    await client.query("COMMIT");
+    return user;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateDiscordUserRecord(params: {
+  userId: string;
+  discordId: string;
+  discordUsername: string;
+  discordAvatarUrl?: string | null;
+  discordEmail?: string | null;
+  discordLocale?: string | null;
+  discordProfile: unknown;
+}): Promise<void> {
+  await db.query(
+    `
+      INSERT INTO users_discord (user_id, discord_id, username, avatar_url, email, locale, profile)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (discord_id)
+      DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        username = EXCLUDED.username,
+        avatar_url = EXCLUDED.avatar_url,
+        email = EXCLUDED.email,
+        locale = EXCLUDED.locale,
+        profile = EXCLUDED.profile,
+        updated_at = NOW()
+    `,
+    [
+      params.userId,
+      params.discordId,
+      params.discordUsername,
+      params.discordAvatarUrl ?? null,
+      params.discordEmail ?? null,
+      params.discordLocale ?? null,
+      params.discordProfile
+    ]
+  );
+}
+
+export async function updateUserAvatarIfMissing(userId: string, avatarUrl?: string | null): Promise<void> {
+  if (!avatarUrl) return;
+  await db.query(
+    `
+      UPDATE users
+      SET avatar_url = COALESCE(avatar_url, $2),
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [userId, avatarUrl]
+  );
 }
 
 export async function updateProfile(

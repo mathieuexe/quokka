@@ -7,6 +7,7 @@ import { useAuth } from "./context/AuthContext";
 import { AddServerPage } from "./pages/AddServerPage";
 import { ChatPage } from "./pages/ChatPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DiscordCallbackPage } from "./pages/DiscordCallbackPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { LegalNoticePage } from "./pages/LegalNoticePage";
@@ -35,6 +36,7 @@ const DEFAULT_DESCRIPTION =
   "Annuaire serveur Discord et gaming pour trouver, ajouter et promouvoir un serveur. Classement, top serveur Discord, communautés actives, serveurs RP, FiveM, Minecraft, GMod, Fortnite, Arma et Stoat.";
 const DEFAULT_IMAGE = `${SITE_URL}/images/logo/logorond.png`;
 const NOINDEX_PATHS = [
+  "/auth/discord/callback",
   "/login",
   "/register",
   "/verify-email",
@@ -233,6 +235,7 @@ export default function App(): JSX.Element {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/auth/discord/callback" element={<DiscordCallbackPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/mentions-legales" element={<LegalNoticePage />} />
           <Route path="/register" element={<RegisterPage />} />

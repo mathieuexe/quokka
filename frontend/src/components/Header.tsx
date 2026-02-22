@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, CreditCard, LogOut, Menu, ShieldCheck, User, X, Zap } from "lucide-react";
 
+const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
+
 type HeaderProps = {
   variant?: "default" | "home";
 };
@@ -115,6 +117,9 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
               <NavLink to="/register" onClick={closeMenus} className="site-header-auth-cta">
                 {t("auth.register")}
               </NavLink>
+              <a href={`${API_URL}/auth/discord`} onClick={closeMenus} className="site-header-auth-discord">
+                Se connecter via Discord
+              </a>
             </div>
           )}
 
@@ -160,6 +165,9 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
                   <NavLink to="/register" onClick={closeMenus} className="site-header-mobile-auth-cta">
                     {t("auth.register")}
                   </NavLink>
+                  <a href={`${API_URL}/auth/discord`} onClick={closeMenus} className="site-header-mobile-auth-discord">
+                    Se connecter via Discord
+                  </a>
                 </div>
               )}
             </div>
