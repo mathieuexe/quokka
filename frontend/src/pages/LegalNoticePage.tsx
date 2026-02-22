@@ -11,7 +11,7 @@ export function LegalNoticePage(): JSX.Element {
         </p>
 
         <h2>Responsable de la publication</h2>
-        <p>Mathieu Cerenzia – Créateur de Quokka</p>
+        <p>Quokka</p>
 
         <h2>Hébergeur</h2>
         <p>Vercel</p>

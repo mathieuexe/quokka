@@ -8,6 +8,7 @@ import { AddServerPage } from "./pages/AddServerPage";
 import { ChatPage } from "./pages/ChatPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DiscordCallbackPage } from "./pages/DiscordCallbackPage";
+import { DiscordSuccess } from "./pages/auth/DiscordSuccess";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { LegalNoticePage } from "./pages/LegalNoticePage";
@@ -37,6 +38,7 @@ const DEFAULT_DESCRIPTION =
 const DEFAULT_IMAGE = `${SITE_URL}/images/logo/logorond.png`;
 const NOINDEX_PATHS = [
   "/auth/discord/callback",
+  "/auth/discord/success",
   "/login",
   "/register",
   "/verify-email",
@@ -236,6 +238,7 @@ export default function App(): JSX.Element {
           <Route path="/" element={<HomePage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/auth/discord/callback" element={<DiscordCallbackPage />} />
+          <Route path="/auth/discord/success" element={<DiscordSuccess />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/mentions-legales" element={<LegalNoticePage />} />
           <Route path="/register" element={<RegisterPage />} />

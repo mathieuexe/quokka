@@ -162,7 +162,6 @@ export async function register(req: Request, res: Response): Promise<void> {
     language: payload.language
   });
 
-  // Vérifier si l'utilisateur fait partie des 100 premiers et attribuer le badge automatiquement
   try {
     const isAmongFirst100 = await isUserAmongFirst100(user.id);
     if (isAmongFirst100) {
@@ -172,11 +171,9 @@ export async function register(req: Request, res: Response): Promise<void> {
       }
     }
   } catch (error) {
-    // Ne pas bloquer l'inscription si l'attribution du badge échoue
     console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
   }
 
-  // Générer et envoyer le code de vérification
   const code = generateVerificationCode();
   await createVerificationCode(user.id, code);
 
@@ -215,11 +212,9 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Vérifier si la 2FA est activée
   const twoFactorActive = await isTwoFactorEnabled(user.id);
 
   if (twoFactorActive) {
-    // Générer et envoyer le code 2FA
     const code = generateVerificationCode();
     await createTwoFactorCode(user.id, code);
 
@@ -241,7 +236,6 @@ export async function login(req: Request, res: Response): Promise<void> {
       });
     }
   } else {
-    // Connexion directe sans 2FA
     await updateLastLogin(user.id);
 
     const token = signAccessToken({
@@ -344,7 +338,6 @@ export async function verify2FA(req: Request, res: Response): Promise<void> {
   });
 }
 
-
 export async function resendCode(req: Request, res: Response): Promise<void> {
   const payload = resendCodeSchema.parse(req.body);
 
@@ -399,7 +392,8 @@ export async function startDiscordLogin(_req: Request, res: Response): Promise<v
 }
 
 export async function handleDiscordCallback(req: Request, res: Response): Promise<void> {
-  const payload = discordCallbackSchema.parse(req.body);
+  // ✅ Lecture depuis req.query (GET) au lieu de req.body (POST)
+  const payload = discordCallbackSchema.parse(req.query);
 
   if (env.DISCORD_SESSION_SECRET && !verifyDiscordState(env.DISCORD_SESSION_SECRET, payload.state)) {
     res.status(400).json({ message: "Session Discord expirée ou invalide." });
@@ -499,16 +493,7 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
     role: user.role
   });
 
-  res.json({
-    token,
-    user: {
-      id: user.id,
-      pseudo: user.pseudo,
-      email: user.email,
-      avatar_url: user.avatar_url,
-      email_verified: user.email_verified,
-      two_factor_enabled: user.two_factor_enabled,
-      role: user.role
-    }
-  });
+  // ✅ Redirection vers le frontend avec le token en paramètre
+  const frontendUrl = env.FRONTEND_URL ?? "https://quokka.gg";
+  res.redirect(`${frontendUrl}/auth/discord/success?token=${token}`);
 }
