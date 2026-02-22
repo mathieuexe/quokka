@@ -20,6 +20,9 @@ type SocialItem = {
   icon: string;
 };
 
+const SITE_URL = import.meta.env.VITE_SITE_URL ?? "https://quokka.gg";
+const DEFAULT_IMAGE = `${SITE_URL}/images/logo/logorond.png`;
+
 function formatRelativeLastLogin(value: string): string {
   const lastLoginDate = new Date(value);
   const now = Date.now();
@@ -52,6 +55,33 @@ function formatChatStatusLabel(status: ChatStatus): string {
   return "HORS LIGNE";
 }
 
+function toMetaDescription(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return fallback;
+  if (trimmed.length <= 160) return trimmed;
+  return `${trimmed.slice(0, 157).trim()}...`;
+}
+
+function setMetaTag(name: string, content: string): void {
+  let element = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute("name", name);
+    document.head.appendChild(element);
+  }
+  element.setAttribute("content", content);
+}
+
+function setMetaProperty(property: string, content: string): void {
+  let element = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute("property", property);
+    document.head.appendChild(element);
+  }
+  element.setAttribute("content", content);
+}
+
 export function UserProfilePage(): JSX.Element {
   const { userId } = useParams();
   const [data, setData] = useState<PublicUserResponse | null>(null);
@@ -70,6 +100,37 @@ export function UserProfilePage(): JSX.Element {
 
     void loadProfile();
   }, [userId]);
+
+  useEffect(() => {
+    if (!data?.user) return;
+    const title = `${data.user.pseudo} — Profil communauté Discord | Quokka`;
+    const description = toMetaDescription(
+      data.user.bio,
+      `Découvrez la communauté de ${data.user.pseudo} et ses serveurs Discord sur Quokka.`
+    );
+    const canonical = new URL(`/users/${data.user.id}`, SITE_URL).toString();
+    const image = data.user.avatar_url?.trim() ? data.user.avatar_url : DEFAULT_IMAGE;
+
+    document.title = title;
+    setMetaTag("description", description);
+    setMetaProperty("og:title", title);
+    setMetaProperty("og:description", description);
+    setMetaProperty("og:url", canonical);
+    setMetaProperty("og:image", image);
+    setMetaTag("twitter:title", title);
+    setMetaTag("twitter:description", description);
+    setMetaTag("twitter:image", image);
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (canonicalLink) {
+      canonicalLink.setAttribute("href", canonical);
+    } else {
+      const link = document.createElement("link");
+      link.setAttribute("rel", "canonical");
+      link.setAttribute("href", canonical);
+      document.head.appendChild(link);
+    }
+  }, [data]);
 
   const socials = useMemo<SocialItem[]>(() => {
     if (!data?.user) return [];
@@ -199,7 +260,7 @@ export function UserProfilePage(): JSX.Element {
                     {server.verified && (
                       <img
                         className="verified-icon"
-                        src="https://quokka.gg/images/icons/verified-icon.svg"
+                        src="/images/badges/blue-verified-badge.png"
                         alt="Serveur vérifié"
                         title="Serveur vérifié"
                       />

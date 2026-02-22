@@ -6,7 +6,7 @@ export function MaintenancePage(): JSX.Element {
   return (
     <section className="maintenance-page">
       <a className="maintenance-logo-link" href="/" aria-label="Quokka">
-        <img className="maintenance-logo" src="https://quokka.gg/images/logomaintenance.png" alt="Quokka" />
+        <img className="maintenance-logo" src="/images/logo/logorond.png" alt="Quokka" />
       </a>
 
       <article className="maintenance-card">

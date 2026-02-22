@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 export function Footer(): JSX.Element {
@@ -31,19 +32,35 @@ export function Footer(): JSX.Element {
     <footer className="site-footer">
       <div className="site-footer-inner">
         <p>{t("footer.copyright", { year })}</p>
-        <div className="footer-language">
-          <span className="footer-language-label">{t("auth.language")}</span>
-          <select
-            value={currentLanguage}
-            onChange={(event) => void i18n.changeLanguage(event.target.value)}
-            aria-label={t("auth.language")}
-          >
-            {languages.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
+        <div className="footer-links">
+          <Link to="/mentions-legales">Mentions légales</Link>
+        </div>
+        <div className="footer-language-block">
+          <div className="footer-language">
+            <span className="footer-language-label">{t("auth.language")}</span>
+            <select
+              value={currentLanguage}
+              onChange={(event) => void i18n.changeLanguage(event.target.value)}
+              aria-label={t("auth.language")}
+            >
+              {languages.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="footer-socials">
+            <a href="https://stt.gg/G2PMQnWx" target="_blank" rel="noreferrer" aria-label="Stoat">
+              <img src="/images/icons/stoat-circle.png" alt="Stoat" />
+            </a>
+            <a href="https://bsky.app/profile/quokka.gg" target="_blank" rel="noreferrer" aria-label="Bluesky">
+              <img src="/images/icons/bluesky-circle.png" alt="Bluesky" />
+            </a>
+            <a href="https://github.com/mathieuexe/quokka" target="_blank" rel="noreferrer" aria-label="Github">
+              <img src="/images/icons/github-circle.png" alt="Github" />
+            </a>
+          </div>
         </div>
       </div>
     </footer>

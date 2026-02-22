@@ -7,12 +7,42 @@ import type { Server } from "../types";
 
 type ServerResponse = { server: Server };
 
+const SITE_URL = import.meta.env.VITE_SITE_URL ?? "https://quokka.gg";
+const DEFAULT_IMAGE = `${SITE_URL}/images/logo/logorond.png`;
+
 function resolveImageUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
   if (trimmed.startsWith("/")) return `https://quokka.gg${trimmed}`;
   return trimmed;
+}
+
+function toMetaDescription(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return fallback;
+  if (trimmed.length <= 160) return trimmed;
+  return `${trimmed.slice(0, 157).trim()}...`;
+}
+
+function setMetaTag(name: string, content: string): void {
+  let element = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute("name", name);
+    document.head.appendChild(element);
+  }
+  element.setAttribute("content", content);
+}
+
+function setMetaProperty(property: string, content: string): void {
+  let element = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute("property", property);
+    document.head.appendChild(element);
+  }
+  element.setAttribute("content", content);
 }
 
 export function ServerPage(): JSX.Element {
@@ -39,6 +69,37 @@ export function ServerPage(): JSX.Element {
     }
     void loadServer();
   }, [serverId, token]);
+
+  useEffect(() => {
+    if (!server) return;
+    const title = `${server.name} — Serveur Discord | Quokka`;
+    const description = toMetaDescription(
+      server.description,
+      "Fiche serveur Discord et gaming sur Quokka avec description, statistiques et lien pour rejoindre la communauté."
+    );
+    const canonical = new URL(`/servers/${server.id}`, SITE_URL).toString();
+    const image = server.banner_url?.trim() ? server.banner_url : DEFAULT_IMAGE;
+
+    document.title = title;
+    setMetaTag("description", description);
+    setMetaProperty("og:title", title);
+    setMetaProperty("og:description", description);
+    setMetaProperty("og:url", canonical);
+    setMetaProperty("og:image", image);
+    setMetaTag("twitter:title", title);
+    setMetaTag("twitter:description", description);
+    setMetaTag("twitter:image", image);
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (canonicalLink) {
+      canonicalLink.setAttribute("href", canonical);
+    } else {
+      const link = document.createElement("link");
+      link.setAttribute("rel", "canonical");
+      link.setAttribute("href", canonical);
+      document.head.appendChild(link);
+    }
+  }, [server]);
 
   if (loadError) {
     return (
@@ -117,7 +178,7 @@ export function ServerPage(): JSX.Element {
               {server.verified && (
                 <img
                   className="verified-icon"
-                  src="https://quokka.gg/images/icons/verified-icon.svg"
+                  src="/images/badges/blue-verified-badge.png"
                   alt="Serveur vérifié"
                   title="Serveur vérifié"
                 />

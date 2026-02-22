@@ -91,6 +91,35 @@ export function HomePage(): JSX.Element {
           {!loading && !error && servers.map((server) => <ServerCard key={server.id} server={server} />)}
         </div>
       </section>
+
+      <section className="home-v2-section home-seo-section" aria-label="Annuaire serveurs Discord et gaming">
+        <div className="home-v2-section-head">
+          <div>
+            <h2>Annuaire et promotion de serveurs Discord & gaming</h2>
+            <p>Classement, visibilité et croissance pour votre communauté.</p>
+          </div>
+        </div>
+        <div className="home-seo-content">
+          <p>
+            Quokka est un annuaire serveur Discord et une liste de serveurs Discord pour trouver un serveur Discord, un serveur discord
+            français, un serveur discord gaming ou une communauté discord active. Ajoutez un serveur discord, faites un ajout serveur discord
+            gratuit, publiez et faites la promotion: pub serveur discord, publicité serveur discord, pub serveur discord gratuit, top serveur
+            discord, classement serveur discord, site pub serveur discord, booster serveur discord, visibilité serveur discord et référencement
+            serveur discord.
+          </p>
+          <p>
+            Notre plateforme couvre aussi les serveurs gaming: serveur fivem, serveur fivem france, serveur fivem RP, serveur fivem whitelist,
+            annuaire serveur fivem, top serveur fivem et référencement serveur fivem. Retrouvez un serveur garrys mod, serveur gmod, serveur gmod
+            RP, serveur gmod darkrp, annuaire serveur gmod, top serveur gmod, référencement serveur gmod, ainsi que serveur minecraft (RP, PVP,
+            survie, moddé), serveur fortnite, serveur arma 3 (RP, milsim), serveur stoat, serveur multigaming, serveur gaming multijoueur,
+            serveur jeu vidéo et serveur roleplay.
+          </p>
+          <p>
+            Quokka est la plateforme pub serveur pour promouvoir un serveur gaming, améliorer la visibilité serveur discord, trouver un
+            serveur discord actif et faire grandir votre communauté gaming en France.
+          </p>
+        </div>
+      </section>
     </section>
   );
 }

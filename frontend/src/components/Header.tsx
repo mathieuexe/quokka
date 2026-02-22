@@ -42,7 +42,7 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
       <div className="site-header-inner">
         <div className="site-header-left">
           <Link to="/" className="site-header-brand" onClick={closeMenus} aria-label={t("header.ariaHome")}>
-            <img className="site-header-logo" src="https://quokka.gg/images/logoblanc.png" alt="" aria-hidden="true" />
+            <img className="site-header-logo" src="/images/logo/logorond.png" alt="" aria-hidden="true" />
             <span className="site-header-brand-text">
               <strong>Quokka</strong>
               <span>{t("header.tagline")}</span>

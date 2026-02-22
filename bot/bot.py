@@ -12,6 +12,10 @@ import json
 import random
 import asyncio
 import time
+import socket
+import urllib.parse
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import stoat
 import requests
 from dotenv import load_dotenv
@@ -33,7 +37,7 @@ MODERATOR_ROLE_2 = os.getenv('MODERATOR_ROLE_2')
 MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
 DEFAULT_NOTIFICATION_CHANNEL_ID = "01KHCH5Y324FH1HP45S6JZJ1H4"
 NOTIFICATION_CHANNEL_ID = os.getenv('NOTIFICATION_CHANNEL_ID') or WELCOME_CHANNEL_ID or LEAVE_CHANNEL_ID or DEFAULT_NOTIFICATION_CHANNEL_ID
-GRADIENT_ROLE_ID = os.getenv('GRADIENT_ROLE_ID') or MODERATOR_ROLE_1 or "01KHCAJ20T9SATYM1PDTYXKZ61"
+GRADIENT_ROLE_ID = os.getenv('GRADIENT_ROLE_ID') or "01KHCAJ20T9SATYM1PDTYXKZ61"
 GRADIENT_COLORS = [
     "#c00000",
     "#c70714",
@@ -47,6 +51,9 @@ GRADIENT_COLORS = [
     "#ff42b3"
 ]
 GRADIENT_STEPS = 8
+DEFAULT_MONITORING_CHANNEL_ID = "01KHHXT9Q97Q0J3QV5SC8ED4FS"
+MONITORING_CHANNEL_ID = os.getenv('MONITORING_CHANNEL_ID') or DEFAULT_MONITORING_CHANNEL_ID
+MONITORING_INTERVAL_SECONDS = 60
 
 # Charger la configuration JSON (optionnel)
 try:
@@ -73,6 +80,10 @@ user_warnings = {}  # Format: {user_id: [{'reason': str, 'warned_by': str, 'time
 
 # Créer le client
 client = stoat.Client()
+monitoring_task = None
+monitoring_message_id = None
+monitoring_last_content = None
+monitoring_message = None
 
 MOODS = [
     {"id": "joie", "tone": "chaleureux, lumineux, enthousiaste"},
@@ -512,7 +523,6 @@ async def apply_role_gradient():
             bot_top_rank = min(role_ranks)
     if bot_top_rank is None:
         print('[GRADIENT] Impossible de déterminer le rang du bot.')
-        return
     start_index = None
     for index, role in enumerate(roles_sorted):
         if role.id == GRADIENT_ROLE_ID:
@@ -525,16 +535,10 @@ async def apply_role_gradient():
             print(f'[GRADIENT] Rôle introuvable: {e}')
             return
         try:
-            if bot_top_rank is not None and role.rank <= bot_top_rank:
-                print(f'[GRADIENT] Rôle ignoré (rang supérieur ou égal au bot): {role.name}.')
-                return
             await role.edit(color=colors[0])
             print(f'[GRADIENT] Couleur appliquée au rôle {role.name}.')
         except Exception as e:
             print(f'[GRADIENT] Échec modification rôle: {e}')
-        return
-    if roles_sorted[start_index].rank <= bot_top_rank:
-        print('[GRADIENT] Rôle cible au-dessus ou égal au bot. Dégradé annulé.')
         return
     updated = 0
     skipped = 0
@@ -543,15 +547,120 @@ async def apply_role_gradient():
         if target_index >= len(roles_sorted):
             break
         target_role = roles_sorted[target_index]
-        if bot_top_rank is not None and target_role.rank <= bot_top_rank:
-            skipped += 1
-            continue
         try:
             await target_role.edit(color=color)
             updated += 1
         except Exception as e:
+            if "NotElevated" in str(e):
+                skipped += 1
             print(f'[GRADIENT] Échec pour {target_role.name}: {e}')
     print(f'[GRADIENT] Rôles mis à jour: {updated} (ignorés: {skipped})')
+
+def build_monitoring_services():
+    railway_host = urllib.parse.urlparse("https://quokka-production.up.railway.app/").hostname
+    return [
+        {"label": "Site internet", "kind": "http", "target": "https://quokka.gg"},
+        {"label": "Cloudflare NS houston", "kind": "tcp", "host": "houston.ns.cloudflare.com", "port": 53},
+        {"label": "Cloudflare NS luciana", "kind": "tcp", "host": "luciana.ns.cloudflare.com", "port": 53},
+        {
+            "label": "Front-end Vercel",
+            "kind": "http",
+            "target": "https://quokka-git-main-mcerenzias-projects.vercel.app"
+        },
+        {"label": "Backend Railway HTTP", "kind": "http", "target": "https://quokka-production.up.railway.app/"},
+        {"label": "Backend Railway (port privé)", "kind": "tcp", "host": railway_host, "port": 8080},
+        {"label": "Bot Quokka (privé)", "kind": "tcp", "host": "83.150.218.85", "port": 26002}
+    ]
+
+def tcp_probe(host, port, timeout):
+    with socket.create_connection((host, port), timeout=timeout):
+        return True
+
+async def check_http(url):
+    start = time.time()
+    try:
+        response = requests.get(url, timeout=8)
+        duration_ms = int((time.time() - start) * 1000)
+        return response.status_code < 400, str(response.status_code), duration_ms
+    except Exception as e:
+        duration_ms = int((time.time() - start) * 1000)
+        return False, str(e), duration_ms
+
+async def check_tcp(host, port):
+    start = time.time()
+    try:
+        await asyncio.to_thread(tcp_probe, host, port, 6)
+        duration_ms = int((time.time() - start) * 1000)
+        return True, "OK", duration_ms
+    except Exception as e:
+        duration_ms = int((time.time() - start) * 1000)
+        return False, str(e), duration_ms
+
+def format_status_line(label, ok, info, duration_ms):
+    if ok:
+        return f"- ✅ OK - {label} ({duration_ms} ms)"
+    return f"- ❌ ERREUR - {label} ({duration_ms} ms)"
+
+async def build_monitoring_message():
+    services = build_monitoring_services()
+    timestamp = datetime.now(ZoneInfo("Europe/Paris")).strftime('%d/%m/%Y %H:%M:%S')
+    lines = ["📡 **Monitoring services**"]
+    for service in services:
+        if service["kind"] == "http":
+            ok, info, duration_ms = await check_http(service["target"])
+            lines.append(format_status_line(service["label"], ok, info, duration_ms))
+        else:
+            host = service["host"]
+            port = service["port"]
+            if host is None:
+                lines.append(f"- {service['label']}: ❌ ERREUR (hôte invalide)")
+                continue
+            ok, info, duration_ms = await check_tcp(host, port)
+            lines.append(format_status_line(service["label"], ok, info, duration_ms))
+    lines.append(f"🕒 Vérifié le {timestamp}")
+    return "\n".join(lines)
+
+async def monitoring_loop():
+    global monitoring_message_id, monitoring_last_content, monitoring_message
+    if not MONITORING_CHANNEL_ID:
+        print('[MONITORING] Canal non défini.')
+        return
+    try:
+        channel = await client.fetch_channel(MONITORING_CHANNEL_ID)
+    except Exception as e:
+        print(f'[MONITORING] Impossible de récupérer le canal: {e}')
+        return
+    if monitoring_message_id is None:
+        initial_message = "📡 **Monitoring services**\n⏳ Initialisation..."
+        try:
+            monitoring_message = await channel.send(initial_message)
+            monitoring_message_id = monitoring_message.id
+            monitoring_last_content = initial_message
+        except Exception as e:
+            print(f'[MONITORING] Envoi initial échoué: {e}')
+            return
+    while True:
+        try:
+            content = await build_monitoring_message()
+            if content != monitoring_last_content:
+                try:
+                    if monitoring_message is not None:
+                        await monitoring_message.edit(content=content)
+                    else:
+                        raise RuntimeError("Message monitoring introuvable")
+                except Exception:
+                    previous_message = monitoring_message
+                    monitoring_message = await channel.send(content)
+                    monitoring_message_id = monitoring_message.id
+                    if previous_message is not None:
+                        try:
+                            await previous_message.delete()
+                        except Exception:
+                            pass
+                monitoring_last_content = content
+        except Exception as e:
+            print(f'[MONITORING] Erreur boucle: {e}')
+        await asyncio.sleep(MONITORING_INTERVAL_SECONDS)
 
 
 # ============================================================================
@@ -583,6 +692,9 @@ async def on_ready(event, /):
     print(f'            pour tester le système de modération!')
     print('=' * 60)
     await apply_role_gradient()
+    global monitoring_task
+    if monitoring_task is None or monitoring_task.done():
+        monitoring_task = asyncio.create_task(monitoring_loop())
 
 
 @client.on(stoat.ServerMemberJoinEvent)

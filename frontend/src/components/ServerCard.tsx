@@ -54,7 +54,7 @@ export function ServerCard({ server, categoryLogoUrl }: ServerCardProps): JSX.El
           {server.verified && (
             <img
               className="verified-icon"
-              src="https://quokka.gg/images/icons/verified-icon.svg"
+              src="/images/badges/blue-verified-badge.png"
               alt="Serveur vérifié"
               title="Serveur vérifié"
             />
