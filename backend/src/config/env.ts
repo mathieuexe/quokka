@@ -16,6 +16,7 @@ const envSchema = z.object({
   STRIPE_PUBLISHABLE_KEY: z.string().optional().default(""),
   RESEND_API_KEY: z.string().optional().default(""),
   DEEPL_API_KEY: z.string().optional().default(""),
+  FRONTEND_URL: z.string().url().default("https://quokka.gg"),
   DISCORD_CLIENT_ID: z.string().optional().default(""),
   DISCORD_CLIENT_SECRET: z.string().optional().default(""),
   DISCORD_REDIRECT_URI: z.string().optional().default(""),
