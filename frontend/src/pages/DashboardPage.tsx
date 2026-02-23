@@ -242,6 +242,8 @@ export function DashboardPage(): JSX.Element {
     if (!token) return;
     const selectedCategory = categories.find((item) => item.id === editCategoryId);
     const isCommunity = selectedCategory ? COMMUNITY_SLUGS.has(selectedCategory.slug) : false;
+    const isHabbo = selectedCategory?.slug === "habbo";
+    const usesLinkOnly = isCommunity || isHabbo;
 
     try {
       await apiRequest<{ message: string }>(`/servers/${serverId}`, {
@@ -253,9 +255,9 @@ export function DashboardPage(): JSX.Element {
           description: editDescription,
           website: editWebsite,
           countryCode: editCountryCode,
-          ip: isCommunity ? undefined : editIp,
-          port: isCommunity ? undefined : Number(editPort),
-          inviteLink: isCommunity ? editInviteLink : undefined,
+          ip: usesLinkOnly ? undefined : editIp,
+          port: usesLinkOnly ? undefined : Number(editPort),
+          inviteLink: usesLinkOnly ? editInviteLink : undefined,
           bannerUrl: editBannerUrl,
           isPublic: editIsPublic
         }
@@ -646,6 +648,8 @@ export function DashboardPage(): JSX.Element {
               const isExpanded = expandedServerId === server.id;
               const selectedCategory = categories.find((item) => item.id === (isEditing ? editCategoryId : server.category_id));
               const isCommunity = selectedCategory ? COMMUNITY_SLUGS.has(selectedCategory.slug) : false;
+              const isHabbo = selectedCategory?.slug === "habbo";
+              const usesLinkOnly = isCommunity || isHabbo;
               const promoteType = promoteTypeByServer[server.id] ?? "essentiel";
               const days = Math.min(30, Math.max(1, promoteDaysByServer[server.id] ?? 1));
               const hours = Math.min(24, Math.max(1, promoteHoursByServer[server.id] ?? 1));
@@ -741,10 +745,10 @@ export function DashboardPage(): JSX.Element {
                               ))}
                             </select>
                           </label>
-                          {isCommunity ? (
+                          {usesLinkOnly ? (
                             <label>
-                              Lien d'invitation
-                              <input value={editInviteLink} onChange={(event) => setEditInviteLink(event.target.value)} />
+                              {isHabbo ? "Lien du rétro" : "Lien d'invitation"}
+                              <input type="url" value={editInviteLink} onChange={(event) => setEditInviteLink(event.target.value)} />
                             </label>
                           ) : (
                             <>

@@ -30,6 +30,7 @@ export function AddServerPage(): JSX.Element {
   const [port, setPort] = useState(25565);
   const [isPublic, setIsPublic] = useState(true);
   const [inviteId, setInviteId] = useState("");
+  const [retroLink, setRetroLink] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const selectedCategory = useMemo(
@@ -46,12 +47,15 @@ export function AddServerPage(): JSX.Element {
   );
   const isDiscord = selectedCategory?.slug === "discord";
   const isStoat = selectedCategory?.slug === "stoat";
-  const isCommunity = isDiscord || isStoat;
+  const isHabbo = selectedCategory?.slug === "habbo";
+  const isCommunity = isDiscord || isStoat || isHabbo;
   const inviteLinkPreview = isDiscord
     ? `https://discord.gg/${inviteId || "invite"}`
     : isStoat
       ? `https://stt.gg/${inviteId || "invite"}`
-      : "";
+      : isHabbo
+        ? retroLink || "https://retro.example"
+        : "";
   const connectionPreview = isCommunity ? inviteLinkPreview : ip ? `${ip}:${port || 25565}` : "IP:PORT";
 
   useEffect(() => {
@@ -79,7 +83,9 @@ export function AddServerPage(): JSX.Element {
         ? `https://discord.gg/${inviteId}`
         : isStoat
           ? `https://stt.gg/${inviteId}`
-          : undefined;
+          : isHabbo
+            ? retroLink
+            : undefined;
 
       await apiRequest<{ id: string }>("/servers", {
         method: "POST",
@@ -99,6 +105,7 @@ export function AddServerPage(): JSX.Element {
       });
       showToast("Serveur ajouté avec succès.");
       setInviteId("");
+      setRetroLink("");
       setIp("");
       setDescription("");
       setBannerUrl("");
@@ -231,6 +238,11 @@ export function AddServerPage(): JSX.Element {
                   Serveur public
                 </label>
               </div>
+            ) : isHabbo ? (
+              <label>
+                Lien du rétro
+                <input type="url" value={retroLink} onChange={(event) => setRetroLink(event.target.value)} required />
+              </label>
             ) : (
               <label>
                 {isDiscord ? "ID invitation (discord.gg)" : "ID Stoat (stt.gg)"}

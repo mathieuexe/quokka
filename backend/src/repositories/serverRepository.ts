@@ -209,6 +209,16 @@ export async function listCategories(): Promise<Array<{ id: string; slug: string
   return result.rows;
 }
 
+export async function getCategoryById(
+  categoryId: string
+): Promise<{ id: string; slug: string; label: string; image_url: string } | null> {
+  const result = await db.query<{ id: string; slug: string; label: string; image_url: string }>(
+    "SELECT id, slug, label, image_url FROM categories WHERE id = $1 LIMIT 1",
+    [categoryId]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function increaseView(serverId: string, userId?: string): Promise<void> {
   if (!userId) {
     await db.query(

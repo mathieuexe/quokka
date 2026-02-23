@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createServer,
   deleteServer,
+  getCategoryById,
   getServerById,
   getServerOwner,
   increaseView,
@@ -38,6 +39,8 @@ const updateServerSchema = z.object({
   bannerUrl: z.string().url().optional().or(z.literal("")),
   isPublic: z.boolean().default(true)
 });
+
+const COMMUNITY_SLUGS = new Set(["discord", "stoat", "habbo"]);
 
 function isImgurUrl(url: string): boolean {
   try {
@@ -124,13 +127,31 @@ export async function addServer(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const isCommunity = payload.inviteLink && !payload.ip && !payload.port;
-  const isGame = !payload.inviteLink && payload.ip && payload.port;
-  if (!isCommunity && !isGame) {
-    res.status(400).json({
-      message: "Le serveur doit contenir soit inviteLink, soit ip+port."
-    });
+  const category = await getCategoryById(payload.categoryId);
+  if (!category) {
+    res.status(400).json({ message: "Catégorie invalide." });
     return;
+  }
+
+  const isCommunityCategory = COMMUNITY_SLUGS.has(category.slug);
+  if (isCommunityCategory) {
+    if (!payload.inviteLink) {
+      res.status(400).json({ message: "Le lien du serveur est requis pour cette catégorie." });
+      return;
+    }
+    if (payload.ip || payload.port) {
+      res.status(400).json({ message: "IP/port non autorisés pour cette catégorie." });
+      return;
+    }
+  } else {
+    if (!payload.ip || !payload.port) {
+      res.status(400).json({ message: "IP et port requis pour cette catégorie." });
+      return;
+    }
+    if (payload.inviteLink) {
+      res.status(400).json({ message: "Le lien d'invitation n'est pas autorisé pour cette catégorie." });
+      return;
+    }
   }
 
   const server = await createServer({
@@ -175,11 +196,37 @@ export async function patchServer(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const isCommunity = payload.inviteLink && !payload.ip && !payload.port;
-  const isGame = !payload.inviteLink && payload.ip && payload.port;
-  if (!isCommunity && !isGame) {
-    res.status(400).json({ message: "Le serveur doit contenir soit inviteLink, soit ip+port." });
+  const currentServer = await getServerById(serverId);
+  if (!currentServer) {
+    res.status(404).json({ message: "Serveur introuvable." });
     return;
+  }
+
+  const category = payload.categoryId ? await getCategoryById(payload.categoryId) : { slug: currentServer.category_slug };
+  if (!category) {
+    res.status(400).json({ message: "Catégorie invalide." });
+    return;
+  }
+
+  const isCommunityCategory = COMMUNITY_SLUGS.has(category.slug);
+  if (isCommunityCategory) {
+    if (!payload.inviteLink) {
+      res.status(400).json({ message: "Le lien du serveur est requis pour cette catégorie." });
+      return;
+    }
+    if (payload.ip || payload.port) {
+      res.status(400).json({ message: "IP/port non autorisés pour cette catégorie." });
+      return;
+    }
+  } else {
+    if (!payload.ip || !payload.port) {
+      res.status(400).json({ message: "IP et port requis pour cette catégorie." });
+      return;
+    }
+    if (payload.inviteLink) {
+      res.status(400).json({ message: "Le lien d'invitation n'est pas autorisé pour cette catégorie." });
+      return;
+    }
   }
 
   await updateServer(serverId, {
