@@ -18,6 +18,7 @@ import { OrderThankYouPage } from "./pages/OrderThankYouPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ServerPage } from "./pages/ServerPage";
 import { SubscriptionsPage } from "./pages/SubscriptionsPage";
+import { TicketsPage } from "./pages/TicketsPage";
 import { UserProfilePage } from "./pages/UserProfilePage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { Verify2FAPage } from "./pages/Verify2FAPage";
@@ -27,6 +28,7 @@ import { AdminUserDetailsPage } from "./admin/AdminUserDetailsPage";
 import { AdminServersPage } from "./admin/AdminServersPage";
 import { AdminSettingsPage } from "./admin/AdminSettingsPage";
 import { AdminSubscriptionsPage } from "./admin/AdminSubscriptionsPage";
+import { AdminTicketsPage } from "./admin/AdminTicketsPage";
 import { AdminManualActivationPage } from "./admin/AdminManualActivationPage";
 import { AdminPromoCodesPage } from "./admin/AdminPromoCodesPage";
 import { AdminWarningsPage } from "./admin/AdminWarningsPage";
@@ -45,6 +47,7 @@ const NOINDEX_PATHS = [
   "/verify-2fa",
   "/dashboard",
   "/subscriptions",
+  "/tickets",
   "/offers",
   "/order/thank-you",
   "/add-server"
@@ -279,6 +282,14 @@ export default function App(): JSX.Element {
             }
           />
           <Route
+            path="/tickets"
+            element={
+              <PrivateRoute>
+                <TicketsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/order/thank-you"
             element={
               <PrivateRoute>
@@ -300,6 +311,7 @@ export default function App(): JSX.Element {
             <Route path="servers" element={<AdminServersPage />} />
             <Route path="settings" element={<AdminSettingsPage />} />
             <Route path="subscriptions" element={<AdminSubscriptionsPage />} />
+            <Route path="tickets" element={<AdminTicketsPage />} />
             <Route path="warnings" element={<AdminWarningsPage />} />
             <Route path="manual-activation" element={<AdminManualActivationPage />} />
             <Route path="promo-codes" element={<AdminPromoCodesPage />} />

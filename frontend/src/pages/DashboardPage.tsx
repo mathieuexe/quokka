@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { apiRequest } from "../lib/api";
@@ -48,6 +49,7 @@ function formatAmountEur(amount: number): string {
 export function DashboardPage(): JSX.Element {
   const { token, isAuthenticated, updateUser } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [pseudo, setPseudo] = useState("");
@@ -361,6 +363,9 @@ export function DashboardPage(): JSX.Element {
           onClick={() => setActiveSection("subscriptions")}
         >
           Abonnements
+        </button>
+        <button type="button" className="dashboard-tab-btn" onClick={() => navigate("/tickets")}>
+          Besoin d’assistance
         </button>
         <button
           type="button"

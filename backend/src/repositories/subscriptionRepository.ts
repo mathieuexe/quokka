@@ -128,3 +128,17 @@ export async function listAllSubscriptions(): Promise<
 export async function deleteSubscription(subscriptionId: string): Promise<void> {
   await db.query("DELETE FROM subscriptions WHERE id = $1", [subscriptionId]);
 }
+
+export async function getSubscriptionOwner(subscriptionId: string): Promise<string | null> {
+  const result = await db.query<{ user_id: string }>(
+    `
+      SELECT s.user_id
+      FROM subscriptions sub
+      JOIN servers s ON s.id = sub.server_id
+      WHERE sub.id = $1
+      LIMIT 1
+    `,
+    [subscriptionId]
+  );
+  return result.rows[0]?.user_id ?? null;
+}

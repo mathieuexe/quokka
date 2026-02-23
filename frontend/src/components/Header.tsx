@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, CreditCard, LogOut, Menu, ShieldCheck, User, X, Zap } from "lucide-react";
+import { ChevronDown, CreditCard, LifeBuoy, LogOut, Menu, ShieldCheck, User, X, Zap } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
 
@@ -23,11 +23,14 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
       { to: "/chat", label: t("nav.liveChat") },
       { to: "/add-server", label: t("nav.addServer") }
     ];
+    if (isAuthenticated) {
+      base.push({ to: "/tickets", label: t("nav.support") });
+    }
     if (isAdmin) {
       base.push({ to: "/admin", label: t("nav.adminPanel") });
     }
     return base;
-  }, [isAdmin, t]);
+  }, [isAdmin, isAuthenticated, t]);
 
   function closeMenus(): void {
     setProfileOpen(false);
@@ -95,6 +98,10 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
                   <Link to="/subscriptions" onClick={closeMenus} className="site-header-dropdown-item" role="menuitem">
                     <CreditCard size={18} />
                     <span>{t("nav.subscriptions")}</span>
+                  </Link>
+                  <Link to="/tickets" onClick={closeMenus} className="site-header-dropdown-item" role="menuitem">
+                    <LifeBuoy size={18} />
+                    <span>{t("nav.support")}</span>
                   </Link>
                   {isAdmin && (
                     <Link to="/admin" onClick={closeMenus} className="site-header-dropdown-item" role="menuitem">

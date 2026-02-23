@@ -2,6 +2,7 @@ import "express-async-errors";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import { join } from "path";
 import { env } from "./config/env.js";
 import { adminRoutes } from "./routes/adminRoutes.js";
 import { authRoutes } from "./routes/authRoutes.js";
@@ -12,6 +13,7 @@ import { serverRoutes } from "./routes/serverRoutes.js";
 import { systemRoutes } from "./routes/systemRoutes.js";
 import { userRoutes } from "./routes/userRoutes.js";
 import { chatRoutes } from "./routes/chatRoutes.js";
+import { ticketRoutes } from "./routes/ticketRoutes.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { maintenanceGuard } from "./middleware/maintenance.js";
 
@@ -38,6 +40,7 @@ app.use(cors({
 app.post("/api/payments/webhook", express.raw({ type: "application/json" }), stripeWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(maintenanceGuard);
+app.use("/uploads", express.static(join(process.cwd(), "uploads")));
 
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
@@ -47,6 +50,7 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
