@@ -3713,6 +3713,29 @@ select option {
   line-height: 1.5;
 }
 
+.chat-reply-preview {
+  margin-top: 0.45rem;
+  border-left: 3px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 0.35rem 0.5rem;
+  background: var(--surface-1);
+}
+
+.chat-reply-user {
+  display: block;
+  font-weight: 900;
+  font-size: 0.85rem;
+}
+
+.chat-reply-text {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-actions {
   display: flex;
   gap: 0.3rem;
@@ -3749,6 +3772,12 @@ select option {
 
 .chat-action-btn:active {
   transform: translateY(0);
+}
+
+.chat-action-reply:hover {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #2563eb;
 }
 
 .chat-action-mute:hover {
@@ -3805,6 +3834,64 @@ select option {
   margin: 0 0 0.65rem;
   color: rgba(248, 113, 113, 0.95);
   font-weight: 900;
+}
+
+.chat-replying {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0 0 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  background: var(--surface-2);
+}
+
+.chat-replying-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.chat-replying-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chat-replying-user {
+  font-weight: 900;
+}
+
+.chat-replying-text {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-reply-cancel {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.chat-reply-cancel:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: rgba(239, 68, 68, 0.95);
 }
 
 .chat-form {

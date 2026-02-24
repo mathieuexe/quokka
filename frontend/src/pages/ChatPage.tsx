@@ -12,6 +12,10 @@ type ChatMessage = {
   message_type: "user" | "system";
   message: string;
   created_at: string;
+  reply_to_message_id: string | null;
+  reply_to_user_id: string | null;
+  reply_to_user_pseudo: string | null;
+  reply_to_message: string | null;
 };
 
 type ChatMessagesResponse = { messages: ChatMessage[] };
@@ -115,6 +119,7 @@ export function ChatPage(): JSX.Element {
   const [userSuggestionSelectedIndex, setUserSuggestionSelectedIndex] = useState(0);
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
   const [guestPseudo, setGuestPseudo] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
 
   const lastCreatedAt = useMemo(() => (messages.length ? messages[messages.length - 1].created_at : null), [messages]);
 
@@ -492,7 +497,11 @@ export function ChatPage(): JSX.Element {
           user_role: "system",
           message_type: "system",
           message: lines.join("\n"),
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          reply_to_message_id: null,
+          reply_to_user_id: null,
+          reply_to_user_pseudo: null,
+          reply_to_message: null
         };
         setMessages((current) => [...current, localMsg].slice(-200));
         setText("");
@@ -649,7 +658,11 @@ export function ChatPage(): JSX.Element {
             user_role: "system",
             message_type: "system",
             message: `Avertissements pour ${body.targetUser} (${result.totalCount}):\n${warningsList || "Aucun avertissement."}`,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            reply_to_message_id: null,
+            reply_to_user_id: null,
+            reply_to_user_pseudo: null,
+            reply_to_message: null
           };
           setMessages((current) => [...current, localMsg].slice(-200));
         } else {
@@ -687,10 +700,12 @@ export function ChatPage(): JSX.Element {
         token: hasToken ? token : undefined,
         body: {
           message: normalized,
+          ...(replyTarget ? { replyToMessageId: replyTarget.id } : {}),
           ...(guestName ? { guestPseudo: guestName } : {})
         }
       });
       setText("");
+      setReplyTarget(null);
       setMessages((current) => {
         if (current.some((m) => m.id === created.message.id)) return current;
         return [...current, created.message].slice(-200);
@@ -772,9 +787,28 @@ export function ChatPage(): JSX.Element {
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
+                    {msg.reply_to_message_id && msg.reply_to_user_pseudo && msg.reply_to_message ? (
+                      <div className="chat-reply-preview">
+                        <span className="chat-reply-user">@{msg.reply_to_user_pseudo}</span>
+                        <span className="chat-reply-text">{msg.reply_to_message}</span>
+                      </div>
+                    ) : null}
                     <p className="chat-text">{renderMessageContent(msg.message)}</p>
-                    {isAdmin && msg.user_id && msg.message_type !== "system" ? (
+                    {msg.message_type !== "system" ? (
                       <div className="chat-actions">
+                        <button
+                          type="button"
+                          className="chat-action-btn chat-action-reply"
+                          title={`Répondre à ${msg.user_pseudo}`}
+                          onClick={() => {
+                            setReplyTarget(msg);
+                            requestAnimationFrame(() => inputRef.current?.focus());
+                          }}
+                        >
+                          ↩
+                        </button>
+                        {isAdmin && msg.user_id ? (
+                          <>
                         <button
                           type="button"
                           className="chat-action-btn chat-action-mute"
@@ -831,6 +865,8 @@ export function ChatPage(): JSX.Element {
                         >
                           🗑️
                         </button>
+                          </>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -841,6 +877,23 @@ export function ChatPage(): JSX.Element {
           <div className="chat-compose">
             {!isAuthenticated && guestPseudo ? <p className="chat-login-hint">Vous discutez en tant qu’invité : {guestPseudo}</p> : null}
             {isAdmin && maintenanceEnabled ? <p className="chat-maintenance-admin">Maintenance du tchat activée.</p> : null}
+            {replyTarget ? (
+              <div className="chat-replying">
+                <div className="chat-replying-main">
+                  <span className="chat-replying-label">Réponse à</span>
+                  <span className="chat-replying-user">@{replyTarget.user_pseudo}</span>
+                  <span className="chat-replying-text">{replyTarget.message}</span>
+                </div>
+                <button
+                  type="button"
+                  className="chat-reply-cancel"
+                  onClick={() => setReplyTarget(null)}
+                  aria-label="Annuler la réponse"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
 
             <form
               className="chat-form"

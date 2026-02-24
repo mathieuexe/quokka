@@ -59,6 +59,12 @@ export function AddServerPage(): JSX.Element {
   const connectionPreview = isCommunity ? inviteLinkPreview : ip ? `${ip}:${port || 25565}` : "IP:PORT";
 
   useEffect(() => {
+    if (isHabbo) {
+      setWebsite("");
+    }
+  }, [isHabbo]);
+
+  useEffect(() => {
     async function loadCategories(): Promise<void> {
       try {
         const data = await apiRequest<CategoriesResponse>("/servers/categories");
@@ -93,7 +99,7 @@ export function AddServerPage(): JSX.Element {
         body: {
           categoryId,
           name,
-          website,
+          website: isHabbo ? "" : website,
           description,
           bannerUrl,
           countryCode,
@@ -176,10 +182,12 @@ export function AddServerPage(): JSX.Element {
                 Nom du serveur
                 <input value={name} onChange={(event) => setName(event.target.value)} required />
               </label>
-              <label>
-                Site web
-                <input type="url" value={website} onChange={(event) => setWebsite(event.target.value)} />
-              </label>
+              {!isHabbo && (
+                <label>
+                  Site web
+                  <input type="url" value={website} onChange={(event) => setWebsite(event.target.value)} />
+                </label>
+              )}
               <label>
                 Pays
                 <select value={countryCode} onChange={(event) => setCountryCode(event.target.value)} required>

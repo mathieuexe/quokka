@@ -253,7 +253,7 @@ export function DashboardPage(): JSX.Element {
           categoryId: editCategoryId,
           name: editName,
           description: editDescription,
-          website: editWebsite,
+          website: isHabbo ? "" : editWebsite,
           countryCode: editCountryCode,
           ip: usesLinkOnly ? undefined : editIp,
           port: usesLinkOnly ? undefined : Number(editPort),
@@ -731,10 +731,12 @@ export function DashboardPage(): JSX.Element {
                             Description
                             <textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} rows={5} />
                           </label>
-                          <label>
-                            Site web
-                            <input type="url" value={editWebsite} onChange={(event) => setEditWebsite(event.target.value)} />
-                          </label>
+                          {!isHabbo && (
+                            <label>
+                              Site web
+                              <input type="url" value={editWebsite} onChange={(event) => setEditWebsite(event.target.value)} />
+                            </label>
+                          )}
                           <label>
                             Pays
                             <select value={editCountryCode} onChange={(event) => setEditCountryCode(event.target.value)}>

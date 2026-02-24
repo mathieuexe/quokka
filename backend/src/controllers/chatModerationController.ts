@@ -140,7 +140,7 @@ export async function banUserHandler(req: Request, res: Response): Promise<void>
     }
 
     const systemMessage = `🔨 ${targetUser.pseudo} a été banni ${durationText} par ${adminUser.pseudo}. Raison: ${payload.reason}`;
-    await createChatMessage(adminUserId, systemMessage);
+    await createChatMessage(adminUserId, systemMessage, null);
 
     res.json({ 
       message: `Utilisateur banni avec succès.`,
@@ -205,7 +205,7 @@ export async function unbanUserHandler(req: Request, res: Response): Promise<voi
 
     // Créer un message système
     const systemMessage = `🔓 ${targetUser.pseudo} a été débanni par ${adminUser.pseudo}.`;
-    await createChatMessage(adminUserId, systemMessage);
+    await createChatMessage(adminUserId, systemMessage, null);
 
     res.json({ message: "Utilisateur débanni avec succès." });
   } catch (error) {
@@ -283,7 +283,7 @@ export async function muteUserHandler(req: Request, res: Response): Promise<void
 
     const deleteText = payload.deleteMessages ? ` (${deletedMessages} messages supprimés)` : "";
     const systemMessage = `🔇 ${targetUser.pseudo} a été rendu muet ${durationText} par ${adminUser.pseudo}. Raison: ${payload.reason}${deleteText}`;
-    await createChatMessage(adminUserId, systemMessage);
+    await createChatMessage(adminUserId, systemMessage, null);
 
     res.json({ 
       message: `Utilisateur rendu muet avec succès.`,
@@ -349,7 +349,7 @@ export async function unmuteUserHandler(req: Request, res: Response): Promise<vo
 
     // Créer un message système
     const systemMessage = `🔊 ${targetUser.pseudo} a été dé-mute par ${adminUser.pseudo}.`;
-    await createChatMessage(adminUserId, systemMessage);
+    await createChatMessage(adminUserId, systemMessage, null);
 
     res.json({ message: "Utilisateur dé-mute avec succès." });
   } catch (error) {
@@ -403,7 +403,7 @@ export async function warnUserHandler(req: Request, res: Response): Promise<void
 
     // Créer un message système
     const systemMessage = `⚠️ ${targetUser.pseudo} a reçu un avertissement de ${adminUser.pseudo}. Raison: ${payload.reason} (${warningCount} avertissement${warningCount > 1 ? 's' : ''} au total)`;
-    await createChatMessage(adminUserId, systemMessage);
+    await createChatMessage(adminUserId, systemMessage, null);
 
     res.json({ 
       message: `Avertissement envoyé avec succès.`,

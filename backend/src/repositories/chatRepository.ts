@@ -9,6 +9,10 @@ export type ChatMessageRecord = {
   message_type: "user" | "system";
   message: string;
   created_at: string;
+  reply_to_message_id: string | null;
+  reply_to_user_id: string | null;
+  reply_to_user_pseudo: string | null;
+  reply_to_message: string | null;
 };
 
 export type ChatOnlineUserRecord = {
@@ -61,9 +65,19 @@ export async function listRecentChatMessages(limit: number): Promise<ChatMessage
           CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role,
           m.message_type,
           m.message,
-          m.created_at
+          m.created_at,
+          m.reply_to_message_id,
+          rm.user_id AS reply_to_user_id,
+          CASE
+            WHEN rm.id IS NULL THEN NULL
+            WHEN rm.message_type = 'system' THEN 'Système'
+            ELSE COALESCE(ru.pseudo, rm.guest_pseudo)
+          END AS reply_to_user_pseudo,
+          rm.message AS reply_to_message
         FROM chat_messages m
         LEFT JOIN users u ON u.id = m.user_id
+        LEFT JOIN chat_messages rm ON rm.id = m.reply_to_message_id
+        LEFT JOIN users ru ON ru.id = rm.user_id
         ORDER BY m.created_at DESC
         LIMIT $1
       ) t
@@ -86,9 +100,19 @@ export async function listChatMessagesAfter(afterIso: string, limit: number): Pr
         CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role,
         m.message_type,
         m.message,
-        m.created_at
+        m.created_at,
+        m.reply_to_message_id,
+        rm.user_id AS reply_to_user_id,
+        CASE
+          WHEN rm.id IS NULL THEN NULL
+          WHEN rm.message_type = 'system' THEN 'Système'
+          ELSE COALESCE(ru.pseudo, rm.guest_pseudo)
+        END AS reply_to_user_pseudo,
+        rm.message AS reply_to_message
       FROM chat_messages m
       LEFT JOIN users u ON u.id = m.user_id
+      LEFT JOIN chat_messages rm ON rm.id = m.reply_to_message_id
+      LEFT JOIN users ru ON ru.id = rm.user_id
       WHERE m.created_at > $1::timestamptz
       ORDER BY m.created_at ASC
       LIMIT $2
@@ -98,7 +122,7 @@ export async function listChatMessagesAfter(afterIso: string, limit: number): Pr
   return result.rows;
 }
 
-export async function createChatMessage(userId: string, message: string): Promise<ChatMessageRecord | null> {
+export async function createChatMessage(userId: string, message: string, replyToMessageId: string | null): Promise<ChatMessageRecord | null> {
   const result = await db.query<ChatMessageRecord>(
     `
       WITH last_message AS (
@@ -109,14 +133,14 @@ export async function createChatMessage(userId: string, message: string): Promis
         LIMIT 1
       ),
       ins AS (
-        INSERT INTO chat_messages (user_id, message)
-        SELECT $1, $2
+        INSERT INTO chat_messages (user_id, message, reply_to_message_id)
+        SELECT $1, $2, $3
         WHERE NOT EXISTS (
           SELECT 1
           FROM last_message
           WHERE NOW() - created_at < INTERVAL '5 seconds'
         )
-        RETURNING id, user_id, message, created_at, message_type
+        RETURNING id, user_id, message, created_at, message_type, reply_to_message_id
       )
       SELECT
         ins.id,
@@ -126,16 +150,26 @@ export async function createChatMessage(userId: string, message: string): Promis
         u.role AS user_role,
         ins.message_type,
         ins.message,
-        ins.created_at
+        ins.created_at,
+        ins.reply_to_message_id,
+        rm.user_id AS reply_to_user_id,
+        CASE
+          WHEN rm.id IS NULL THEN NULL
+          WHEN rm.message_type = 'system' THEN 'Système'
+          ELSE COALESCE(ru.pseudo, rm.guest_pseudo)
+        END AS reply_to_user_pseudo,
+        rm.message AS reply_to_message
       FROM ins
       JOIN users u ON u.id = ins.user_id
+      LEFT JOIN chat_messages rm ON rm.id = ins.reply_to_message_id
+      LEFT JOIN users ru ON ru.id = rm.user_id
     `,
-    [userId, message]
+    [userId, message, replyToMessageId]
   );
   return result.rows[0] ?? null;
 }
 
-export async function createGuestChatMessage(guestPseudo: string, message: string): Promise<ChatMessageRecord | null> {
+export async function createGuestChatMessage(guestPseudo: string, message: string, replyToMessageId: string | null): Promise<ChatMessageRecord | null> {
   const result = await db.query<ChatMessageRecord>(
     `
       WITH last_message AS (
@@ -146,14 +180,14 @@ export async function createGuestChatMessage(guestPseudo: string, message: strin
         LIMIT 1
       ),
       ins AS (
-        INSERT INTO chat_messages (user_id, guest_pseudo, message)
-        SELECT NULL, $1, $2
+        INSERT INTO chat_messages (user_id, guest_pseudo, message, reply_to_message_id)
+        SELECT NULL, $1, $2, $3
         WHERE NOT EXISTS (
           SELECT 1
           FROM last_message
           WHERE NOW() - created_at < INTERVAL '5 seconds'
         )
-        RETURNING id, user_id, guest_pseudo, message, created_at, message_type
+        RETURNING id, user_id, guest_pseudo, message, created_at, message_type, reply_to_message_id
       )
       SELECT
         ins.id,
@@ -163,10 +197,20 @@ export async function createGuestChatMessage(guestPseudo: string, message: strin
         'user' AS user_role,
         ins.message_type,
         ins.message,
-        ins.created_at
+        ins.created_at,
+        ins.reply_to_message_id,
+        rm.user_id AS reply_to_user_id,
+        CASE
+          WHEN rm.id IS NULL THEN NULL
+          WHEN rm.message_type = 'system' THEN 'Système'
+          ELSE COALESCE(ru.pseudo, rm.guest_pseudo)
+        END AS reply_to_user_pseudo,
+        rm.message AS reply_to_message
       FROM ins
+      LEFT JOIN chat_messages rm ON rm.id = ins.reply_to_message_id
+      LEFT JOIN users ru ON ru.id = rm.user_id
     `,
-    [guestPseudo, message]
+    [guestPseudo, message, replyToMessageId]
   );
   return result.rows[0] ?? null;
 }
@@ -188,7 +232,11 @@ export async function clearChatMessagesAndCreateSystemMessage(actorUserId: strin
           'system' AS user_role,
           message_type,
           message,
-          created_at
+          created_at,
+          NULL AS reply_to_message_id,
+          NULL AS reply_to_user_id,
+          NULL AS reply_to_user_pseudo,
+          NULL AS reply_to_message
       `,
       ["Le tchat a été effacé par un modérateur.", actorUserId]
     );
@@ -231,7 +279,11 @@ export async function setChatMaintenanceEnabled(actorUserId: string, enabled: bo
           'system' AS user_role,
           message_type,
           message,
-          created_at
+          created_at,
+          NULL AS reply_to_message_id,
+          NULL AS reply_to_user_id,
+          NULL AS reply_to_user_pseudo,
+          NULL AS reply_to_message
       `,
       [enabled ? "Maintenance du tchat activée par un modérateur." : "Maintenance du tchat désactivée par un modérateur.", actorUserId]
     );
@@ -339,9 +391,19 @@ export async function getChatMessageById(messageId: string): Promise<ChatMessage
         m.created_at,
         CASE WHEN m.message_type = 'system' THEN 'Système' ELSE COALESCE(u.pseudo, m.guest_pseudo) END AS user_pseudo,
         CASE WHEN m.message_type = 'system' THEN NULL ELSE u.avatar_url END AS user_avatar_url,
-        CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role
+        CASE WHEN m.message_type = 'system' THEN 'system' ELSE COALESCE(u.role, 'user') END AS user_role,
+        m.reply_to_message_id,
+        rm.user_id AS reply_to_user_id,
+        CASE
+          WHEN rm.id IS NULL THEN NULL
+          WHEN rm.message_type = 'system' THEN 'Système'
+          ELSE COALESCE(ru.pseudo, rm.guest_pseudo)
+        END AS reply_to_user_pseudo,
+        rm.message AS reply_to_message
       FROM chat_messages m
       LEFT JOIN users u ON u.id = m.user_id
+      LEFT JOIN chat_messages rm ON rm.id = m.reply_to_message_id
+      LEFT JOIN users ru ON ru.id = rm.user_id
       WHERE m.id = $1
       LIMIT 1
     `,
@@ -373,7 +435,11 @@ export async function createSystemMessage(actorUserId: string, message: string):
         created_at,
         'Système' AS user_pseudo,
         NULL AS user_avatar_url,
-        'system' AS user_role
+        'system' AS user_role,
+        NULL AS reply_to_message_id,
+        NULL AS reply_to_user_id,
+        NULL AS reply_to_user_pseudo,
+        NULL AS reply_to_message
     `,
     [actorUserId, message]
   );

@@ -34,7 +34,8 @@ const postSchema = z.object({
     .string()
     .trim()
     .regex(/^Guest_[A-Za-z0-9]{1,6}$/, "Pseudo invité invalide.")
-    .optional()
+    .optional(),
+  replyToMessageId: z.string().uuid().optional()
 });
 
 const onlineSchema = z.object({
@@ -73,6 +74,19 @@ export async function getChatMessages(req: Request, res: Response): Promise<void
 export async function postChatMessage(req: Request, res: Response): Promise<void> {
   const payload = postSchema.parse(req.body);
   const userId = req.user?.sub;
+  let replyToMessageId: string | null = payload.replyToMessageId ?? null;
+
+  if (replyToMessageId) {
+    const replyTarget = await getChatMessageById(replyToMessageId);
+    if (!replyTarget) {
+      res.status(404).json({ message: "Message de réponse introuvable." });
+      return;
+    }
+    if (replyTarget.message_type === "system") {
+      res.status(400).json({ message: "Impossible de répondre à un message système." });
+      return;
+    }
+  }
 
   const settings = await getChatSettings();
   if (settings.maintenance_enabled && req.user?.role !== "admin") {
@@ -82,7 +96,7 @@ export async function postChatMessage(req: Request, res: Response): Promise<void
 
   if (!userId) {
     const guestPseudo = payload.guestPseudo ?? generateGuestPseudo();
-    const message = await createGuestChatMessage(guestPseudo, payload.message);
+    const message = await createGuestChatMessage(guestPseudo, payload.message, replyToMessageId);
     if (!message) {
       res.status(429).json({ message: "Anti-spam : veuillez attendre 5 secondes entre deux messages." });
       return;
@@ -131,7 +145,7 @@ export async function postChatMessage(req: Request, res: Response): Promise<void
     return;
   }
 
-  const message = await createChatMessage(userId, payload.message);
+  const message = await createChatMessage(userId, payload.message, replyToMessageId);
   if (!message) {
     res.status(429).json({ message: "Anti-spam : veuillez attendre 5 secondes entre deux messages." });
     return;
