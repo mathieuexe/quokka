@@ -275,6 +275,10 @@ a {
   line-height: 1.55;
 }
 
+.maintenance-message {
+  white-space: pre-wrap;
+}
+
 .maintenance-socials {
   display: flex;
   align-items: center;

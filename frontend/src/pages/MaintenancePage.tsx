@@ -30,7 +30,7 @@ export function MaintenancePage(): JSX.Element {
       </a>
 
       <article className="maintenance-card">
-        <p>{message || t("maintenance.message")}</p>
+        <p className="maintenance-message">{message || t("maintenance.message")}</p>
         <p>{t("maintenance.followUs")}</p>
 
         <div className="maintenance-socials">
