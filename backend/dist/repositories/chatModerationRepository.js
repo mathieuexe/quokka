@@ -9,7 +9,7 @@ export async function isUserBanned(userId) {
       WHERE user_id = $1
       LIMIT 1
     `, [userId]);
-    return result.rows.length > 0;
+    return result.rows[0] || null;
 }
 /**
  * Vérifie si un utilisateur est muet
@@ -21,7 +21,7 @@ export async function isUserMuted(userId) {
       WHERE user_id = $1
       LIMIT 1
     `, [userId]);
-    return result.rows.length > 0;
+    return result.rows[0] || null;
 }
 /**
  * Obtient le statut de modération complet d'un utilisateur
@@ -95,6 +95,17 @@ export async function unbanUser(userId) {
     `, [userId]);
     return result.rows.length > 0;
 }
+export async function listUserBans(userId, limit = 50) {
+    const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+    const result = await db.query(`
+      SELECT id, user_id, admin_user_id, reason, expires_at, created_at, is_active
+      FROM chat_bans
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `, [userId, safeLimit]);
+    return result.rows;
+}
 /**
  * Rend muet un utilisateur
  */
@@ -121,6 +132,29 @@ export async function muteUser(userId, adminUserId, reason, durationHours) {
     finally {
         client.release();
     }
+}
+/**
+ * Dé-mute un utilisateur
+ */
+export async function unmuteUser(userId) {
+    const result = await db.query(`
+      UPDATE chat_mutes 
+      SET is_active = FALSE 
+      WHERE user_id = $1 AND is_active = TRUE
+      RETURNING id
+    `, [userId]);
+    return result.rows.length > 0;
+}
+export async function listUserMutes(userId, limit = 50) {
+    const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+    const result = await db.query(`
+      SELECT id, user_id, admin_user_id, reason, expires_at, created_at, is_active
+      FROM chat_mutes
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `, [userId, safeLimit]);
+    return result.rows;
 }
 /**
  * Supprime les messages d'un utilisateur muet (à appeler lors du mute)
@@ -166,6 +200,70 @@ export async function listUserWarnings(userId, limit = 50) {
       LIMIT $2
     `, [userId, safeLimit]);
     return result.rows;
+}
+function buildWarningFilters(filters) {
+    const values = [];
+    const clauses = [];
+    if (filters.userId) {
+        values.push(filters.userId);
+        clauses.push(`w.user_id = $${values.length}`);
+    }
+    if (filters.targetPseudo) {
+        values.push(filters.targetPseudo);
+        clauses.push(`LOWER(target.pseudo) = LOWER($${values.length})`);
+    }
+    if (filters.from && filters.to) {
+        values.push(filters.from);
+        values.push(filters.to);
+        clauses.push(filters.excludeRange
+            ? `(w.created_at < $${values.length - 1} OR w.created_at > $${values.length})`
+            : `w.created_at >= $${values.length - 1} AND w.created_at <= $${values.length}`);
+    }
+    else if (filters.from) {
+        values.push(filters.from);
+        clauses.push(filters.excludeRange ? `w.created_at < $${values.length}` : `w.created_at >= $${values.length}`);
+    }
+    else if (filters.to) {
+        values.push(filters.to);
+        clauses.push(filters.excludeRange ? `w.created_at > $${values.length}` : `w.created_at <= $${values.length}`);
+    }
+    return { clause: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", values };
+}
+export async function listWarningsWithFilters(filters) {
+    const safeLimit = Math.max(1, Math.min(200, Math.floor(filters.limit ?? 50)));
+    const safeOffset = Math.max(0, Math.floor(filters.offset ?? 0));
+    const { clause, values } = buildWarningFilters(filters);
+    const limitIndex = values.length + 1;
+    const offsetIndex = values.length + 2;
+    const result = await db.query(`
+      SELECT 
+        w.id,
+        w.user_id,
+        w.admin_user_id,
+        w.reason,
+        w.created_at,
+        target.pseudo as user_pseudo,
+        admin.pseudo as admin_pseudo
+      FROM chat_warnings w
+      JOIN users target ON target.id = w.user_id
+      JOIN users admin ON admin.id = w.admin_user_id
+      ${clause}
+      ORDER BY w.created_at DESC
+      LIMIT $${limitIndex}
+      OFFSET $${offsetIndex}
+    `, [...values, safeLimit, safeOffset]);
+    return result.rows;
+}
+export async function countWarningsWithFilters(filters) {
+    const { clause, values } = buildWarningFilters(filters);
+    const result = await db.query(`
+      SELECT COUNT(*) as count
+      FROM chat_warnings w
+      JOIN users target ON target.id = w.user_id
+      JOIN users admin ON admin.id = w.admin_user_id
+      ${clause}
+    `, values);
+    return parseInt(result.rows[0]?.count ?? "0");
 }
 /**
  * Obtient le nombre total d'avertissements d'un utilisateur

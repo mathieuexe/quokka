@@ -7,6 +7,12 @@ import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "
 import { createVerificationCode, createTwoFactorCode } from "../repositories/verificationRepository.js";
 import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
+import { updateMaintenanceSettings as updateMaintenanceSettingsInDb, getMaintenanceSettings as getMaintenanceSettingsFromDb } from "../repositories/systemRepository.js";
+const maintenanceSchema = z.object({
+    is_enabled: z.boolean(),
+    message: z.string().max(1000).default(""),
+    allowed_ips: z.string().max(1000).optional()
+});
 const promoteSchema = z
     .object({
     serverId: z.string().uuid(),
@@ -126,7 +132,11 @@ export async function getAdminSubscriptions(_req, res) {
 }
 export async function getAdminUserDetails(req, res) {
     const params = adminUserParamsSchema.parse(req.params);
-    const [users, servers] = await Promise.all([listUsers(), listServersByUser(params.userId)]);
+    const [users, servers, availableBadges] = await Promise.all([
+        listUsers(),
+        listServersByUser(params.userId),
+        listAvailableBadges()
+    ]);
     const user = users.find((entry) => entry.id === params.userId);
     if (!user) {
         res.status(404).json({ message: "Utilisateur introuvable." });
@@ -137,7 +147,8 @@ export async function getAdminUserDetails(req, res) {
             ...user,
             customer_reference: generateCustomerReference(user.pseudo, user.id)
         },
-        servers
+        servers,
+        availableBadges
     });
 }
 export async function getAdminPromoCodes(_req, res) {
@@ -290,4 +301,16 @@ export async function removeAdminUser(req, res) {
     }
     await deleteUser(payload.userId);
     res.json({ message: "Utilisateur supprimé avec succès." });
+}
+export async function getMaintenanceSettings(_req, res) {
+    const settings = await getMaintenanceSettingsFromDb();
+    res.json(settings);
+}
+export async function updateMaintenanceSettings(req, res) {
+    const payload = maintenanceSchema.parse(req.body);
+    await updateMaintenanceSettingsInDb({
+        ...payload,
+        allowed_ips: payload.allowed_ips ?? ""
+    });
+    res.json({ message: "Paramètres de maintenance mis à jour." });
 }

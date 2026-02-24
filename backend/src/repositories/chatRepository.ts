@@ -1,5 +1,5 @@
 import { db } from "../config/db.js";
-import type { ChatMessage } from "../models/chat.js";
+import type { ChatMessage } from "../types/chat.js";
 
 // Fonctions de modération d'IP
 export async function banIp(ipAddress: string): Promise<void> {

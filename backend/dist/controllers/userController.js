@@ -1,9 +1,8 @@
-import { z } from "zod";
 import { getChatPresenceStatusForUser } from "../repositories/chatRepository.js";
+import { listBadgesByUserId, findUserById } from "../repositories/userRepository.js";
 import { listPublicServersByUser } from "../repositories/serverRepository.js";
-import { findUserById, listBadgesByUserId } from "../repositories/userRepository.js";
-export async function getPublicUserProfile(req, res) {
-    const userId = z.string().uuid().parse(req.params.userId);
+export async function getUserProfile(req, res) {
+    const { userId } = req.params;
     const user = await findUserById(userId);
     if (!user) {
         res.status(404).json({ message: "Utilisateur introuvable." });
@@ -15,7 +14,7 @@ export async function getPublicUserProfile(req, res) {
         user: {
             id: user.id,
             pseudo: user.pseudo,
-            chat_status: presence.status,
+            chat_status: presence.is_online ? "online" : "offline",
             bio: user.bio,
             avatar_url: user.avatar_url,
             created_at: user.created_at,

@@ -1,29 +1,60 @@
 import { z } from "zod";
-import { banUser, unbanUser, muteUser, deleteUserChatMessages, warnUser, listUserWarnings, getUserWarningCount, getUserModerationStatus, isUserBanned, isUserMuted } from "../repositories/chatModerationRepository.js";
-import { findUserById } from "../repositories/userRepository.js";
+import { banUser, unbanUser, muteUser, unmuteUser, deleteUserChatMessages, warnUser, listUserWarnings, listUserBans, listUserMutes, listWarningsWithFilters, countWarningsWithFilters, getUserWarningCount, getUserModerationStatus, isUserBanned, isUserMuted } from "../repositories/chatModerationRepository.js";
+import { findUserById, findUserByPseudo } from "../repositories/userRepository.js";
 import { createChatMessage } from "../repositories/chatRepository.js";
 // Schémas de validation
 const banSchema = z.object({
-    userId: z.string().uuid("ID utilisateur invalide."),
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional(),
     reason: z.string().min(1, "Le motif est requis.").max(500, "Motif trop long."),
-    durationHours: z.number().int().positive().optional()
+    durationHours: z.coerce.number().positive().optional()
+}).refine(data => data.userId || data.targetUser, {
+    message: "Vous devez spécifier un ID utilisateur ou un pseudo."
 });
 const unbanSchema = z.object({
-    userId: z.string().uuid("ID utilisateur invalide.")
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional()
+}).refine(data => data.userId || data.targetUser, {
+    message: "Vous devez spécifier un ID utilisateur ou un pseudo."
 });
 const muteSchema = z.object({
-    userId: z.string().uuid("ID utilisateur invalide."),
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional(),
     reason: z.string().min(1, "Le motif est requis.").max(500, "Motif trop long."),
-    durationHours: z.number().int().positive().optional(),
+    durationHours: z.coerce.number().positive().optional(),
     deleteMessages: z.boolean().default(true)
+}).refine(data => data.userId || data.targetUser, {
+    message: "Vous devez spécifier un ID utilisateur ou un pseudo."
+});
+const unmuteSchema = z.object({
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional()
+}).refine(data => data.userId || data.targetUser, {
+    message: "Vous devez spécifier un ID utilisateur ou un pseudo."
 });
 const warnSchema = z.object({
-    userId: z.string().uuid("ID utilisateur invalide."),
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional(),
     reason: z.string().min(1, "Le motif est requis.").max(500, "Motif trop long.")
+}).refine(data => data.userId || data.targetUser, {
+    message: "Vous devez spécifier un ID utilisateur ou un pseudo."
 });
 const warningsSchema = z.object({
-    userId: z.string().uuid("ID utilisateur invalide."),
-    limit: z.number().int().positive().max(100).optional().default(50)
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional().default(50)
+});
+const warningsListSchema = z.object({
+    userId: z.string().uuid("ID utilisateur invalide.").optional(),
+    targetUser: z.string().optional(),
+    status: z.enum(["all", "active", "inactive"]).optional().default("all"),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    limit: z.coerce.number().int().positive().max(200).optional().default(50),
+    offset: z.coerce.number().int().min(0).optional().default(0)
+});
+const cassierSchema = z.object({
+    limit: z.coerce.number().int().positive().max(200).optional().default(50)
 });
 /**
  * Commande /ban - Bannit un utilisateur temporairement ou définitivement
@@ -37,13 +68,20 @@ export async function banUserHandler(req, res) {
             return;
         }
         // Vérifier que l'utilisateur existe
-        const targetUser = await findUserById(payload.userId);
+        let targetUser = null;
+        if (payload.userId) {
+            targetUser = await findUserById(payload.userId);
+        }
+        else if (payload.targetUser) {
+            targetUser = await findUserByPseudo(payload.targetUser);
+        }
         if (!targetUser) {
             res.status(404).json({ message: "Utilisateur non trouvé." });
             return;
         }
+        const targetUserId = targetUser.id;
         // Vérifier que l'utilisateur n'est pas déjà banni
-        if (await isUserBanned(payload.userId)) {
+        if (await isUserBanned(targetUserId)) {
             res.status(400).json({ message: "Cet utilisateur est déjà banni." });
             return;
         }
@@ -54,13 +92,21 @@ export async function banUserHandler(req, res) {
             return;
         }
         // Créer le bannissement
-        const ban = await banUser(payload.userId, adminUserId, payload.reason, payload.durationHours);
+        const ban = await banUser(targetUserId, adminUserId, payload.reason, payload.durationHours);
         // Créer un message système
-        const durationText = payload.durationHours
-            ? `pendant ${payload.durationHours} heure(s)`
-            : "définitivement";
+        let durationText = "définitivement";
+        if (ban.expires_at) {
+            const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+            durationText = `jusqu'au ${dateFormatter.format(new Date(ban.expires_at))}`;
+        }
         const systemMessage = `🔨 ${targetUser.pseudo} a été banni ${durationText} par ${adminUser.pseudo}. Raison: ${payload.reason}`;
-        await createChatMessage(adminUserId, systemMessage);
+        await createChatMessage(adminUserId, systemMessage, null);
         res.json({
             message: `Utilisateur banni avec succès.`,
             ban: {
@@ -92,13 +138,20 @@ export async function unbanUserHandler(req, res) {
             return;
         }
         // Vérifier que l'utilisateur existe
-        const targetUser = await findUserById(payload.userId);
+        let targetUser = null;
+        if (payload.userId) {
+            targetUser = await findUserById(payload.userId);
+        }
+        else if (payload.targetUser) {
+            targetUser = await findUserByPseudo(payload.targetUser);
+        }
         if (!targetUser) {
             res.status(404).json({ message: "Utilisateur non trouvé." });
             return;
         }
+        const targetUserId = targetUser.id;
         // Débannir l'utilisateur
-        const wasUnbanned = await unbanUser(payload.userId);
+        const wasUnbanned = await unbanUser(targetUserId);
         if (!wasUnbanned) {
             res.status(400).json({ message: "Cet utilisateur n'est pas banni." });
             return;
@@ -111,7 +164,7 @@ export async function unbanUserHandler(req, res) {
         }
         // Créer un message système
         const systemMessage = `🔓 ${targetUser.pseudo} a été débanni par ${adminUser.pseudo}.`;
-        await createChatMessage(adminUserId, systemMessage);
+        await createChatMessage(adminUserId, systemMessage, null);
         res.json({ message: "Utilisateur débanni avec succès." });
     }
     catch (error) {
@@ -135,22 +188,29 @@ export async function muteUserHandler(req, res) {
             return;
         }
         // Vérifier que l'utilisateur existe
-        const targetUser = await findUserById(payload.userId);
+        let targetUser = null;
+        if (payload.userId) {
+            targetUser = await findUserById(payload.userId);
+        }
+        else if (payload.targetUser) {
+            targetUser = await findUserByPseudo(payload.targetUser);
+        }
         if (!targetUser) {
             res.status(404).json({ message: "Utilisateur non trouvé." });
             return;
         }
+        const targetUserId = targetUser.id;
         // Vérifier que l'utilisateur n'est pas déjà muet
-        if (await isUserMuted(payload.userId)) {
+        if (await isUserMuted(targetUserId)) {
             res.status(400).json({ message: "Cet utilisateur est déjà muet." });
             return;
         }
         // Créer le mute
-        const mute = await muteUser(payload.userId, adminUserId, payload.reason, payload.durationHours);
+        const mute = await muteUser(targetUserId, adminUserId, payload.reason, payload.durationHours);
         // Supprimer les messages si demandé
         let deletedMessages = 0;
         if (payload.deleteMessages) {
-            deletedMessages = await deleteUserChatMessages(payload.userId);
+            deletedMessages = await deleteUserChatMessages(targetUserId);
         }
         // Obtenir les données de l'admin
         const adminUser = await findUserById(adminUserId);
@@ -159,12 +219,20 @@ export async function muteUserHandler(req, res) {
             return;
         }
         // Créer un message système
-        const durationText = payload.durationHours
-            ? `pendant ${payload.durationHours} heure(s)`
-            : "définitivement";
+        let durationText = "définitivement";
+        if (mute.expires_at) {
+            const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+            durationText = `jusqu'au ${dateFormatter.format(new Date(mute.expires_at))}`;
+        }
         const deleteText = payload.deleteMessages ? ` (${deletedMessages} messages supprimés)` : "";
         const systemMessage = `🔇 ${targetUser.pseudo} a été rendu muet ${durationText} par ${adminUser.pseudo}. Raison: ${payload.reason}${deleteText}`;
-        await createChatMessage(adminUserId, systemMessage);
+        await createChatMessage(adminUserId, systemMessage, null);
         res.json({
             message: `Utilisateur rendu muet avec succès.`,
             mute: {
@@ -186,6 +254,56 @@ export async function muteUserHandler(req, res) {
     }
 }
 /**
+ * Commande /unmute - Dé-mute un utilisateur
+ */
+export async function unmuteUserHandler(req, res) {
+    try {
+        const payload = unmuteSchema.parse(req.body);
+        const adminUserId = req.user?.sub;
+        if (!adminUserId) {
+            res.status(401).json({ message: "Authentification requise." });
+            return;
+        }
+        // Vérifier que l'utilisateur existe
+        let targetUser = null;
+        if (payload.userId) {
+            targetUser = await findUserById(payload.userId);
+        }
+        else if (payload.targetUser) {
+            targetUser = await findUserByPseudo(payload.targetUser);
+        }
+        if (!targetUser) {
+            res.status(404).json({ message: "Utilisateur non trouvé." });
+            return;
+        }
+        const targetUserId = targetUser.id;
+        // Dé-mute l'utilisateur
+        const wasUnmuted = await unmuteUser(targetUserId);
+        if (!wasUnmuted) {
+            res.status(400).json({ message: "Cet utilisateur n'est pas muet." });
+            return;
+        }
+        // Obtenir les données de l'admin
+        const adminUser = await findUserById(adminUserId);
+        if (!adminUser) {
+            res.status(404).json({ message: "Administrateur non trouvé." });
+            return;
+        }
+        // Créer un message système
+        const systemMessage = `🔊 ${targetUser.pseudo} a été dé-mute par ${adminUser.pseudo}.`;
+        await createChatMessage(adminUserId, systemMessage, null);
+        res.json({ message: "Utilisateur dé-mute avec succès." });
+    }
+    catch (error) {
+        if (error instanceof z.ZodError) {
+            res.status(400).json({ message: error.errors[0].message });
+            return;
+        }
+        console.error("Erreur lors du dé-mute:", error);
+        res.status(500).json({ message: "Erreur serveur." });
+    }
+}
+/**
  * Commande /warn - Avertit un utilisateur
  */
 export async function warnUserHandler(req, res) {
@@ -197,11 +315,18 @@ export async function warnUserHandler(req, res) {
             return;
         }
         // Vérifier que l'utilisateur existe
-        const targetUser = await findUserById(payload.userId);
+        let targetUser = null;
+        if (payload.userId) {
+            targetUser = await findUserById(payload.userId);
+        }
+        else if (payload.targetUser) {
+            targetUser = await findUserByPseudo(payload.targetUser);
+        }
         if (!targetUser) {
             res.status(404).json({ message: "Utilisateur non trouvé." });
             return;
         }
+        const targetUserId = targetUser.id;
         // Obtenir les données de l'admin
         const adminUser = await findUserById(adminUserId);
         if (!adminUser) {
@@ -209,11 +334,11 @@ export async function warnUserHandler(req, res) {
             return;
         }
         // Créer l'avertissement
-        const warning = await warnUser(payload.userId, adminUserId, payload.reason);
-        const warningCount = await getUserWarningCount(payload.userId);
+        const warning = await warnUser(targetUserId, adminUserId, payload.reason);
+        const warningCount = await getUserWarningCount(targetUserId);
         // Créer un message système
         const systemMessage = `⚠️ ${targetUser.pseudo} a reçu un avertissement de ${adminUser.pseudo}. Raison: ${payload.reason} (${warningCount} avertissement${warningCount > 1 ? 's' : ''} au total)`;
-        await createChatMessage(adminUserId, systemMessage);
+        await createChatMessage(adminUserId, systemMessage, null);
         res.json({
             message: `Avertissement envoyé avec succès.`,
             warning: {
@@ -239,21 +364,27 @@ export async function warnUserHandler(req, res) {
  */
 export async function getUserWarningsHandler(req, res) {
     try {
-        const query = warningsSchema.parse(req.query);
         const adminUserId = req.user?.sub;
         if (!adminUserId) {
             res.status(401).json({ message: "Authentification requise." });
             return;
         }
-        // Vérifier que l'utilisateur existe
-        const targetUser = await findUserById(query.userId);
+        const payload = warningsSchema.parse(req.method === 'POST' ? req.body : req.query);
+        let targetUser = null;
+        if (payload.userId) {
+            targetUser = await findUserById(payload.userId);
+        }
+        else if (payload.targetUser) {
+            targetUser = await findUserByPseudo(payload.targetUser);
+        }
         if (!targetUser) {
             res.status(404).json({ message: "Utilisateur non trouvé." });
             return;
         }
+        const targetUserId = targetUser.id;
         // Récupérer les avertissements
-        const warnings = await listUserWarnings(query.userId, query.limit);
-        const totalCount = await getUserWarningCount(query.userId);
+        const warnings = await listUserWarnings(targetUserId, payload.limit);
+        const totalCount = await getUserWarningCount(targetUserId);
         res.json({
             user: {
                 id: targetUser.id,
@@ -275,6 +406,143 @@ export async function getUserWarningsHandler(req, res) {
             return;
         }
         console.error("Erreur lors de la récupération des avertissements:", error);
+        res.status(500).json({ message: "Erreur serveur." });
+    }
+}
+export async function listAllWarningsHandler(req, res) {
+    try {
+        const adminUserId = req.user?.sub;
+        if (!adminUserId) {
+            res.status(401).json({ message: "Authentification requise." });
+            return;
+        }
+        const payload = warningsListSchema.parse(req.query);
+        const normalizedPseudo = payload.targetUser ? payload.targetUser.replace(/^@/, "") : undefined;
+        let from = payload.from;
+        let to = payload.to;
+        let excludeRange = false;
+        if (payload.status !== "all") {
+            if (!from && !to) {
+                const now = new Date();
+                const fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                from = fromDate.toISOString();
+                to = now.toISOString();
+            }
+            if (payload.status === "inactive") {
+                excludeRange = true;
+            }
+        }
+        const warnings = await listWarningsWithFilters({
+            userId: payload.userId,
+            targetPseudo: normalizedPseudo,
+            from,
+            to,
+            excludeRange,
+            limit: payload.limit,
+            offset: payload.offset
+        });
+        const totalCount = await countWarningsWithFilters({
+            userId: payload.userId,
+            targetPseudo: normalizedPseudo,
+            from,
+            to,
+            excludeRange
+        });
+        let activeFrom = from;
+        let activeTo = to;
+        if (!activeFrom && !activeTo) {
+            const now = new Date();
+            const fallbackFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            activeFrom = fallbackFrom.toISOString();
+            activeTo = now.toISOString();
+        }
+        const activeFromMs = activeFrom ? new Date(activeFrom).getTime() : null;
+        const activeToMs = activeTo ? new Date(activeTo).getTime() : null;
+        res.json({
+            warnings: warnings.map((warning) => {
+                const createdAtMs = new Date(warning.created_at).getTime();
+                const isActive = activeFromMs && activeToMs
+                    ? createdAtMs >= activeFromMs && createdAtMs <= activeToMs
+                    : activeFromMs
+                        ? createdAtMs >= activeFromMs
+                        : activeToMs
+                            ? createdAtMs <= activeToMs
+                            : true;
+                return {
+                    id: warning.id,
+                    userId: warning.user_id,
+                    userPseudo: warning.user_pseudo,
+                    adminPseudo: warning.admin_pseudo,
+                    reason: warning.reason,
+                    createdAt: warning.created_at,
+                    isActive
+                };
+            }),
+            totalCount
+        });
+    }
+    catch (error) {
+        if (error instanceof z.ZodError) {
+            res.status(400).json({ message: error.errors[0].message });
+            return;
+        }
+        console.error("Erreur lors de la récupération des avertissements:", error);
+        res.status(500).json({ message: "Erreur serveur." });
+    }
+}
+export async function getUserCassierHandler(req, res) {
+    try {
+        const userId = req.user?.sub;
+        if (!userId) {
+            res.status(401).json({ message: "Authentification requise." });
+            return;
+        }
+        const payload = cassierSchema.parse(req.query);
+        const [bans, mutes, warnings] = await Promise.all([
+            listUserBans(userId, payload.limit),
+            listUserMutes(userId, payload.limit),
+            listUserWarnings(userId, payload.limit)
+        ]);
+        const nowMs = Date.now();
+        const warningActiveAfter = nowMs - 30 * 24 * 60 * 60 * 1000;
+        res.json({
+            bans: bans.map((ban) => {
+                const expiresAtMs = ban.expires_at ? new Date(ban.expires_at).getTime() : null;
+                const isActive = ban.is_active && (!expiresAtMs || expiresAtMs > nowMs);
+                return {
+                    id: ban.id,
+                    reason: ban.reason,
+                    expiresAt: ban.expires_at,
+                    createdAt: ban.created_at,
+                    isActive
+                };
+            }),
+            mutes: mutes.map((mute) => {
+                const expiresAtMs = mute.expires_at ? new Date(mute.expires_at).getTime() : null;
+                const isActive = mute.is_active && (!expiresAtMs || expiresAtMs > nowMs);
+                return {
+                    id: mute.id,
+                    reason: mute.reason,
+                    expiresAt: mute.expires_at,
+                    createdAt: mute.created_at,
+                    isActive
+                };
+            }),
+            warnings: warnings.map((warning) => ({
+                id: warning.id,
+                reason: warning.reason,
+                createdAt: warning.created_at,
+                adminPseudo: warning.admin_pseudo,
+                isActive: new Date(warning.created_at).getTime() >= warningActiveAfter
+            }))
+        });
+    }
+    catch (error) {
+        if (error instanceof z.ZodError) {
+            res.status(400).json({ message: error.errors[0].message });
+            return;
+        }
+        console.error("Erreur lors de la récupération du casier:", error);
         res.status(500).json({ message: "Erreur serveur." });
     }
 }

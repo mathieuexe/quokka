@@ -57,3 +57,13 @@ export async function listAllSubscriptions() {
 export async function deleteSubscription(subscriptionId) {
     await db.query("DELETE FROM subscriptions WHERE id = $1", [subscriptionId]);
 }
+export async function getSubscriptionOwner(subscriptionId) {
+    const result = await db.query(`
+      SELECT s.user_id
+      FROM subscriptions sub
+      JOIN servers s ON s.id = sub.server_id
+      WHERE sub.id = $1
+      LIMIT 1
+    `, [subscriptionId]);
+    return result.rows[0]?.user_id ?? null;
+}

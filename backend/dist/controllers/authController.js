@@ -1,73 +1,11 @@
+import { randomBytes, createHmac } from "crypto";
 import { z } from "zod";
-import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
-import { createUser, findUserByEmail, findUserById, updateLastLogin, isUserAmongFirst100, getBadgeIdBySlug, assignBadgeToUser } from "../repositories/userRepository.js";
+import { createUser, findUserByEmail, findUserById, updateLastLogin, isUserAmongFirst100, getBadgeIdBySlug, assignBadgeToUser, findUserByDiscordId, createUserFromDiscord, updateDiscordUserRecord, updateUserAvatarIfMissing, findUserByPseudo } from "../repositories/userRepository.js";
 import { signAccessToken } from "../utils/jwt.js";
 import { createVerificationCode, findVerificationCode, markVerificationCodeAsUsed, markEmailAsVerified, createTwoFactorCode, findTwoFactorCode, markTwoFactorCodeAsUsed, isTwoFactorEnabled } from "../repositories/verificationRepository.js";
 import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
-let authentikDiscoveryCache = null;
-async function getAuthentikDiscovery() {
-    const issuer = env.AUTHENTIK_ISSUER;
-    if (!issuer) {
-        throw new Error("Authentik n'est pas configuré.");
-    }
-    const now = Date.now();
-    if (authentikDiscoveryCache && authentikDiscoveryCache.issuer === issuer && now - authentikDiscoveryCache.fetchedAt < 10 * 60 * 1000) {
-        return authentikDiscoveryCache.value;
-    }
-    const url = `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error("Impossible de charger la configuration OIDC.");
-    }
-    const data = (await response.json());
-    if (!data.authorization_endpoint || !data.token_endpoint || !data.userinfo_endpoint || !data.issuer) {
-        throw new Error("Configuration OIDC invalide.");
-    }
-    const discovery = {
-        issuer: data.issuer,
-        authorization_endpoint: data.authorization_endpoint,
-        token_endpoint: data.token_endpoint,
-        userinfo_endpoint: data.userinfo_endpoint
-    };
-    authentikDiscoveryCache = { issuer, value: discovery, fetchedAt: now };
-    return discovery;
-}
-function buildFrontendBaseUrl(req) {
-    const origin = req.headers.origin;
-    if (typeof origin === "string")
-        return origin;
-    return env.CORS_ORIGIN;
-}
-function buildStateJwt(payload) {
-    const value = JSON.stringify({ ...payload, exp: Date.now() + 10 * 60 * 1000 });
-    const encoded = Buffer.from(value, "utf-8").toString("base64url");
-    const sig = crypto.createHmac("sha256", env.JWT_SECRET).update(encoded).digest("base64url");
-    return `${encoded}.${sig}`;
-}
-function readStateJwt(state) {
-    try {
-        const [encoded, sig] = state.split(".");
-        if (!encoded || !sig)
-            return null;
-        const expectedSig = crypto.createHmac("sha256", env.JWT_SECRET).update(encoded).digest("base64url");
-        const sigOk = Buffer.byteLength(sig) === Buffer.byteLength(expectedSig) &&
-            crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
-        if (!sigOk)
-            return null;
-        const raw = Buffer.from(encoded, "base64url").toString("utf-8");
-        const parsed = JSON.parse(raw);
-        if (!parsed.nonce || !parsed.next || typeof parsed.exp !== "number")
-            return null;
-        if (Date.now() > parsed.exp)
-            return null;
-        return { nonce: parsed.nonce, next: parsed.next };
-    }
-    catch {
-        return null;
-    }
-}
 const registerSchema = z
     .object({
     pseudo: z.string().min(2).max(60),
@@ -96,6 +34,74 @@ const resendCodeSchema = z.object({
     userId: z.string().uuid(),
     type: z.enum(["verification", "2fa"])
 });
+const discordCallbackSchema = z.object({
+    code: z.string().min(1),
+    state: z.string().optional()
+});
+const discordUserSchema = z.object({
+    id: z.string(),
+    username: z.string(),
+    global_name: z.string().nullable().optional(),
+    avatar: z.string().nullable().optional(),
+    email: z.string().email().nullable().optional(),
+    verified: z.boolean().optional(),
+    locale: z.string().optional(),
+    mfa_enabled: z.boolean().optional(),
+    banner: z.string().nullable().optional(),
+    accent_color: z.number().nullable().optional(),
+    premium_type: z.number().nullable().optional()
+});
+function createDiscordState(secret) {
+    const timestamp = Date.now().toString();
+    const nonce = randomBytes(16).toString("hex");
+    const signature = createHmac("sha256", secret).update(`${timestamp}.${nonce}`).digest("hex");
+    return Buffer.from(`${timestamp}.${nonce}.${signature}`).toString("base64url");
+}
+function verifyDiscordState(secret, state) {
+    if (!state)
+        return false;
+    let decoded;
+    try {
+        decoded = Buffer.from(state, "base64url").toString("utf8");
+    }
+    catch {
+        return false;
+    }
+    const [timestamp, nonce, signature] = decoded.split(".");
+    if (!timestamp || !nonce || !signature)
+        return false;
+    const expected = createHmac("sha256", secret).update(`${timestamp}.${nonce}`).digest("hex");
+    if (expected !== signature)
+        return false;
+    const ageMs = Date.now() - Number(timestamp);
+    return Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= 10 * 60 * 1000;
+}
+function getDiscordAvatarUrl(user) {
+    if (user.avatar) {
+        return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=256`;
+    }
+    const fallbackIndex = user.id ? (Number(user.id.slice(-1)) % 5) : 0;
+    return `https://cdn.discordapp.com/embed/avatars/${fallbackIndex}.png`;
+}
+function normalizePseudo(value) {
+    const trimmed = value.trim().replace(/\s+/g, "");
+    return trimmed.slice(0, 60) || "discord-user";
+}
+async function generateUniquePseudo(base) {
+    let candidate = normalizePseudo(base);
+    const baseValue = candidate;
+    let attempt = 0;
+    while (await findUserByPseudo(candidate)) {
+        attempt += 1;
+        const suffix = randomBytes(2).toString("hex");
+        candidate = `${baseValue}-${suffix}`.slice(0, 60);
+        if (attempt > 8) {
+            candidate = `${baseValue}-${randomBytes(4).toString("hex")}`.slice(0, 60);
+            break;
+        }
+    }
+    return candidate;
+}
 export async function register(req, res) {
     const payload = registerSchema.parse(req.body);
     const existing = await findUserByEmail(payload.email);
@@ -110,7 +116,6 @@ export async function register(req, res) {
         passwordHash,
         language: payload.language
     });
-    // Vérifier si l'utilisateur fait partie des 100 premiers et attribuer le badge automatiquement
     try {
         const isAmongFirst100 = await isUserAmongFirst100(user.id);
         if (isAmongFirst100) {
@@ -121,10 +126,8 @@ export async function register(req, res) {
         }
     }
     catch (error) {
-        // Ne pas bloquer l'inscription si l'attribution du badge échoue
         console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
     }
-    // Générer et envoyer le code de vérification
     const code = generateVerificationCode();
     await createVerificationCode(user.id, code);
     const emailTemplate = generateVerificationEmailTemplate(user.pseudo, code, user.language);
@@ -159,10 +162,8 @@ export async function login(req, res) {
         res.status(401).json({ message: "Identifiants invalides." });
         return;
     }
-    // Vérifier si la 2FA est activée
     const twoFactorActive = await isTwoFactorEnabled(user.id);
     if (twoFactorActive) {
-        // Générer et envoyer le code 2FA
         const code = generateVerificationCode();
         await createTwoFactorCode(user.id, code);
         const emailTemplate = generate2FAEmailTemplate(user.pseudo, code, user.language);
@@ -184,7 +185,6 @@ export async function login(req, res) {
         }
     }
     else {
-        // Connexion directe sans 2FA
         await updateLastLogin(user.id);
         const token = signAccessToken({
             sub: user.id,
@@ -271,87 +271,6 @@ export async function verify2FA(req, res) {
         }
     });
 }
-export async function authentikAdminSsoLogin(req, res) {
-    if (!env.AUTHENTIK_ISSUER || !env.AUTHENTIK_CLIENT_ID || !env.AUTHENTIK_CLIENT_SECRET || !env.AUTHENTIK_REDIRECT_URI) {
-        res.status(501).json({ message: "SSO Authentik non configuré." });
-        return;
-    }
-    const discovery = await getAuthentikDiscovery();
-    const nonce = crypto.randomBytes(16).toString("hex");
-    const next = typeof req.query.next === "string" ? req.query.next : "/admin";
-    const state = buildStateJwt({ nonce, next });
-    const authorizeUrl = new URL(discovery.authorization_endpoint);
-    authorizeUrl.searchParams.set("client_id", env.AUTHENTIK_CLIENT_ID);
-    authorizeUrl.searchParams.set("redirect_uri", env.AUTHENTIK_REDIRECT_URI);
-    authorizeUrl.searchParams.set("response_type", "code");
-    authorizeUrl.searchParams.set("scope", "openid email profile");
-    authorizeUrl.searchParams.set("state", state);
-    authorizeUrl.searchParams.set("nonce", nonce);
-    res.redirect(authorizeUrl.toString());
-}
-export async function authentikAdminSsoCallback(req, res) {
-    if (!env.AUTHENTIK_ISSUER || !env.AUTHENTIK_CLIENT_ID || !env.AUTHENTIK_CLIENT_SECRET || !env.AUTHENTIK_REDIRECT_URI) {
-        res.status(501).json({ message: "SSO Authentik non configuré." });
-        return;
-    }
-    const code = typeof req.query.code === "string" ? req.query.code : null;
-    const state = typeof req.query.state === "string" ? req.query.state : null;
-    if (!code || !state) {
-        res.status(400).json({ message: "Paramètres SSO manquants." });
-        return;
-    }
-    const parsedState = readStateJwt(state);
-    if (!parsedState) {
-        res.status(400).json({ message: "State SSO invalide." });
-        return;
-    }
-    const discovery = await getAuthentikDiscovery();
-    const tokenResponse = await fetch(discovery.token_endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-            grant_type: "authorization_code",
-            code,
-            redirect_uri: env.AUTHENTIK_REDIRECT_URI,
-            client_id: env.AUTHENTIK_CLIENT_ID,
-            client_secret: env.AUTHENTIK_CLIENT_SECRET
-        })
-    });
-    const tokenJson = (await tokenResponse.json().catch(() => ({})));
-    if (!tokenResponse.ok || !tokenJson.access_token) {
-        res.status(401).json({ message: "Échange du code SSO impossible." });
-        return;
-    }
-    const userinfoResponse = await fetch(discovery.userinfo_endpoint, {
-        headers: { Authorization: `Bearer ${tokenJson.access_token}` }
-    });
-    const userinfo = (await userinfoResponse.json().catch(() => ({})));
-    if (!userinfoResponse.ok || !userinfo.email) {
-        res.status(401).json({ message: "Impossible de récupérer le profil SSO." });
-        return;
-    }
-    const user = await findUserByEmail(userinfo.email);
-    if (!user || user.role !== "admin") {
-        res.status(403).json({ message: "Accès admin refusé." });
-        return;
-    }
-    await updateLastLogin(user.id);
-    const token = signAccessToken({ sub: user.id, email: user.email, role: user.role });
-    const frontendBase = buildFrontendBaseUrl(req).replace(/\/$/, "");
-    const next = parsedState.next.startsWith("/") ? parsedState.next : "/admin";
-    const userPayload = {
-        id: user.id,
-        pseudo: user.pseudo,
-        email: user.email,
-        avatar_url: user.avatar_url,
-        email_verified: user.email_verified,
-        two_factor_enabled: user.two_factor_enabled,
-        role: user.role
-    };
-    const userB64 = Buffer.from(JSON.stringify(userPayload), "utf-8").toString("base64");
-    const redirectUrl = `${frontendBase}/sso/authentik#token=${encodeURIComponent(token)}&user=${encodeURIComponent(userB64)}&next=${encodeURIComponent(next)}`;
-    res.redirect(redirectUrl);
-}
 export async function resendCode(req, res) {
     const payload = resendCodeSchema.parse(req.body);
     const user = await findUserById(payload.userId);
@@ -383,4 +302,114 @@ export async function resendCode(req, res) {
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
+}
+export async function startDiscordLogin(_req, res) {
+    if (!env.DISCORD_CLIENT_ID || !env.DISCORD_REDIRECT_URI) {
+        res.status(500).json({ message: "Configuration Discord manquante." });
+        return;
+    }
+    const params = new URLSearchParams({
+        client_id: env.DISCORD_CLIENT_ID,
+        redirect_uri: env.DISCORD_REDIRECT_URI,
+        response_type: "code",
+        scope: "identify email"
+    });
+    if (env.DISCORD_SESSION_SECRET) {
+        params.set("state", createDiscordState(env.DISCORD_SESSION_SECRET));
+    }
+    res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
+}
+export async function handleDiscordCallback(req, res) {
+    // ✅ Lecture depuis req.query (GET) au lieu de req.body (POST)
+    const payload = discordCallbackSchema.parse(req.query);
+    if (env.DISCORD_SESSION_SECRET && !verifyDiscordState(env.DISCORD_SESSION_SECRET, payload.state)) {
+        res.status(400).json({ message: "Session Discord expirée ou invalide." });
+        return;
+    }
+    if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.DISCORD_REDIRECT_URI) {
+        res.status(500).json({ message: "Configuration Discord manquante." });
+        return;
+    }
+    const tokenParams = new URLSearchParams({
+        client_id: env.DISCORD_CLIENT_ID,
+        client_secret: env.DISCORD_CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code: payload.code,
+        redirect_uri: env.DISCORD_REDIRECT_URI
+    });
+    const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: tokenParams.toString()
+    });
+    if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        res.status(401).json({ message: "Échec de la connexion Discord.", error: errorText });
+        return;
+    }
+    const tokenData = (await tokenResponse.json());
+    const userResponse = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    if (!userResponse.ok) {
+        const errorText = await userResponse.text();
+        res.status(401).json({ message: "Impossible de récupérer le profil Discord.", error: errorText });
+        return;
+    }
+    const discordUserRaw = (await userResponse.json());
+    const discordUser = discordUserSchema.parse(discordUserRaw);
+    const discordAvatarUrl = getDiscordAvatarUrl(discordUser);
+    const pseudoBase = discordUser.global_name ?? discordUser.username;
+    const pseudo = await generateUniquePseudo(pseudoBase);
+    const email = discordUser.email ?? `discord-${discordUser.id}@users.discord`;
+    let user = await findUserByDiscordId(discordUser.id);
+    if (!user) {
+        const passwordHash = await hashPassword(randomBytes(32).toString("hex"));
+        user = await createUserFromDiscord({
+            pseudo,
+            email,
+            passwordHash,
+            avatarUrl: discordAvatarUrl,
+            emailVerified: discordUser.verified ?? Boolean(discordUser.email),
+            discordId: discordUser.id,
+            discordUsername: discordUser.username,
+            discordAvatarUrl,
+            discordEmail: discordUser.email ?? null,
+            discordLocale: discordUser.locale ?? null,
+            discordProfile: discordUserRaw
+        });
+        try {
+            const isAmongFirst100 = await isUserAmongFirst100(user.id);
+            if (isAmongFirst100) {
+                const badgeId = await getBadgeIdBySlug("100_premiers_utilisateurs");
+                if (badgeId) {
+                    await assignBadgeToUser(user.id, badgeId);
+                }
+            }
+        }
+        catch (error) {
+            console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
+        }
+    }
+    else {
+        await updateDiscordUserRecord({
+            userId: user.id,
+            discordId: discordUser.id,
+            discordUsername: discordUser.username,
+            discordAvatarUrl,
+            discordEmail: discordUser.email ?? null,
+            discordLocale: discordUser.locale ?? null,
+            discordProfile: discordUserRaw
+        });
+        await updateUserAvatarIfMissing(user.id, discordAvatarUrl);
+    }
+    await updateLastLogin(user.id);
+    const token = signAccessToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role
+    });
+    // ✅ Redirection vers le frontend avec le token en paramètre
+    const frontendUrl = env.FRONTEND_URL ?? "https://quokka.gg";
+    res.redirect(`${frontendUrl}/auth/discord/success?token=${token}`);
 }

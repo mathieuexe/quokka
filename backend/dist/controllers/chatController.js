@@ -1,5 +1,6 @@
+import { randomBytes } from "crypto";
 import { z } from "zod";
-import { clearChatMessagesAndCreateSystemMessage, createChatMessage, createSystemMessage, deleteChatMessageById, deleteChatPresence, getChatMessageById, getChatSettings, listChatMessagesAfter, listOnlineChatUsers, listRecentChatMessages, setChatMaintenanceEnabled, upsertChatPresence } from "../repositories/chatRepository.js";
+import { clearChatMessagesAndCreateSystemMessage, createChatMessage, createGuestChatMessage, createSystemMessage, deleteChatMessageById, deleteChatPresence, getChatMessageById, getChatSettings, listChatMessagesAfter, listOnlineChatGuests, listOnlineChatUsers, listRecentChatMessages, setChatMaintenanceEnabled, upsertChatPresence } from "../repositories/chatRepository.js";
 import { isUserBanned, isUserMuted } from "../repositories/chatModerationRepository.js";
 const listSchema = z.object({
     after: z.string().optional(),
@@ -10,7 +11,13 @@ const postSchema = z.object({
         .string()
         .trim()
         .min(1, "Message vide.")
-        .max(500, "Message trop long (500 caractères max).")
+        .max(500, "Message trop long (500 caractères max)."),
+    guestPseudo: z
+        .string()
+        .trim()
+        .regex(/^Guest_[A-Za-z0-9]{1,6}$/, "Pseudo invité invalide.")
+        .optional(),
+    replyToMessageId: z.string().uuid().optional()
 });
 const onlineSchema = z.object({
     window: z.coerce.number().int().positive().max(600).optional(),
@@ -19,6 +26,15 @@ const onlineSchema = z.object({
 const maintenanceSchema = z.object({
     enabled: z.boolean()
 });
+function generateGuestPseudo() {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const bytes = randomBytes(6);
+    let suffix = "";
+    for (const value of bytes) {
+        suffix += alphabet[value % alphabet.length];
+    }
+    return `Guest_${suffix}`;
+}
 export async function getChatMessages(req, res) {
     const query = listSchema.parse(req.query);
     const limit = query.limit ?? 50;
@@ -33,26 +49,72 @@ export async function getChatMessages(req, res) {
 export async function postChatMessage(req, res) {
     const payload = postSchema.parse(req.body);
     const userId = req.user?.sub;
-    if (!userId) {
-        res.status(401).json({ message: "Authentification requise." });
-        return;
-    }
-    // Vérifier si l'utilisateur est banni
-    if (await isUserBanned(userId)) {
-        res.status(403).json({ message: "Vous êtes banni du tchat." });
-        return;
-    }
-    // Vérifier si l'utilisateur est muet
-    if (await isUserMuted(userId)) {
-        res.status(403).json({ message: "Vous êtes muet et ne pouvez pas envoyer de messages." });
-        return;
+    let replyToMessageId = payload.replyToMessageId ?? null;
+    if (replyToMessageId) {
+        const replyTarget = await getChatMessageById(replyToMessageId);
+        if (!replyTarget) {
+            res.status(404).json({ message: "Message de réponse introuvable." });
+            return;
+        }
+        if (replyTarget.message_type === "system") {
+            res.status(400).json({ message: "Impossible de répondre à un message système." });
+            return;
+        }
     }
     const settings = await getChatSettings();
     if (settings.maintenance_enabled && req.user?.role !== "admin") {
         res.status(503).json({ message: "Maintenance du tchat en cours." });
         return;
     }
-    const message = await createChatMessage(userId, payload.message);
+    if (!userId) {
+        const guestPseudo = payload.guestPseudo ?? generateGuestPseudo();
+        const message = await createGuestChatMessage(guestPseudo, payload.message, replyToMessageId);
+        if (!message) {
+            res.status(429).json({ message: "Anti-spam : veuillez attendre 5 secondes entre deux messages." });
+            return;
+        }
+        res.status(201).json({ message });
+        return;
+    }
+    const ban = await isUserBanned(userId);
+    if (ban) {
+        let message = "Vous êtes banni du tchat.";
+        if (ban.expires_at) {
+            const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+            message = `Vous êtes banni du tchat jusqu'au ${dateFormatter.format(new Date(ban.expires_at))}.`;
+        }
+        if (ban.reason) {
+            message += ` Motif : ${ban.reason}`;
+        }
+        res.status(403).json({ message });
+        return;
+    }
+    const mute = await isUserMuted(userId);
+    if (mute) {
+        let message = "Vous êtes muet et ne pouvez pas envoyer de messages.";
+        if (mute.expires_at) {
+            const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+            message = `Vous êtes muet jusqu'au ${dateFormatter.format(new Date(mute.expires_at))}.`;
+        }
+        if (mute.reason) {
+            message += ` Motif : ${mute.reason}`;
+        }
+        res.status(403).json({ message });
+        return;
+    }
+    const message = await createChatMessage(userId, payload.message, replyToMessageId);
     if (!message) {
         res.status(429).json({ message: "Anti-spam : veuillez attendre 5 secondes entre deux messages." });
         return;
@@ -84,6 +146,13 @@ export async function getChatOnlineUsers(req, res) {
     const users = await listOnlineChatUsers(windowSeconds, limit);
     res.json({ users });
 }
+export async function getChatOnlineGuests(req, res) {
+    const query = onlineSchema.parse(req.query);
+    const windowSeconds = query.window ?? 60;
+    const limit = query.limit ?? 50;
+    const guests = await listOnlineChatGuests(windowSeconds, limit);
+    res.json({ guests });
+}
 export async function postChatClear(req, res) {
     const actorUserId = req.user?.sub;
     if (!actorUserId) {
@@ -95,7 +164,7 @@ export async function postChatClear(req, res) {
 }
 export async function getChatStatus(req, res) {
     const settings = await getChatSettings();
-    res.json({ maintenance_enabled: settings.maintenance_enabled, updated_at: settings.updated_at });
+    res.json({ maintenance_enabled: settings.maintenance_enabled });
 }
 export async function postChatMaintenance(req, res) {
     const actorUserId = req.user?.sub;
@@ -104,7 +173,8 @@ export async function postChatMaintenance(req, res) {
         return;
     }
     const payload = maintenanceSchema.parse(req.body);
-    const message = await setChatMaintenanceEnabled(actorUserId, payload.enabled);
+    await setChatMaintenanceEnabled(payload.enabled);
+    const message = await createSystemMessage(actorUserId, `Le mode maintenance du chat a été ${payload.enabled ? "activé" : "désactivé"}.`);
     res.json({ message, maintenance_enabled: payload.enabled });
 }
 export async function deleteChatMessage(req, res) {

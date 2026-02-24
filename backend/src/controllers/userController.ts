@@ -1,11 +1,11 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { getChatPresenceStatusForUser } from "../repositories/chatRepository.js";
+import { listBadgesByUserId, findUserById } from "../repositories/userRepository.js";
 import { listPublicServersByUser } from "../repositories/serverRepository.js";
-import { findUserById, listBadgesByUserId } from "../repositories/userRepository.js";
 
-export async function getPublicUserProfile(req: Request, res: Response): Promise<void> {
-  const userId = z.string().uuid().parse(req.params.userId);
+export async function getUserProfile(req: Request, res: Response): Promise<void> {
+  const { userId } = req.params;
   const user = await findUserById(userId);
   if (!user) {
     res.status(404).json({ message: "Utilisateur introuvable." });
@@ -18,7 +18,7 @@ export async function getPublicUserProfile(req: Request, res: Response): Promise
     user: {
       id: user.id,
       pseudo: user.pseudo,
-      chat_status: presence.status,
+      chat_status: presence.is_online ? "online" : "offline",
       bio: user.bio,
       avatar_url: user.avatar_url,
       created_at: user.created_at,

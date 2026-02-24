@@ -137,6 +137,10 @@ export async function listCategories() {
     const result = await db.query("SELECT id, slug, label, image_url FROM categories ORDER BY label ASC");
     return result.rows;
 }
+export async function getCategoryById(categoryId) {
+    const result = await db.query("SELECT id, slug, label, image_url FROM categories WHERE id = $1 LIMIT 1", [categoryId]);
+    return result.rows[0] ?? null;
+}
 export async function increaseView(serverId, userId) {
     if (!userId) {
         await db.query(`

@@ -202,7 +202,7 @@ export async function postChatClear(req: Request, res: Response): Promise<void> 
 
 export async function getChatStatus(req: Request, res: Response): Promise<void> {
   const settings = await getChatSettings();
-  res.json({ maintenance_enabled: settings.maintenance_enabled, updated_at: settings.updated_at });
+  res.json({ maintenance_enabled: settings.maintenance_enabled });
 }
 
 export async function postChatMaintenance(req: Request, res: Response): Promise<void> {
@@ -212,7 +212,11 @@ export async function postChatMaintenance(req: Request, res: Response): Promise<
     return;
   }
   const payload = maintenanceSchema.parse(req.body);
-  const message = await setChatMaintenanceEnabled(actorUserId, payload.enabled);
+  await setChatMaintenanceEnabled(payload.enabled);
+  const message = await createSystemMessage(
+    actorUserId,
+    `Le mode maintenance du chat a été ${payload.enabled ? "activé" : "désactivé"}.`
+  );
   res.json({ message, maintenance_enabled: payload.enabled });
 }
 
