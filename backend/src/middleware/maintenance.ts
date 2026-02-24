@@ -12,7 +12,7 @@ export async function maintenanceGuard(req: Request, res: Response, next: NextFu
     const allowedIps = settings.allowed_ips?.split(",").map(ip => ip.trim()) || [];
     const userIp = req.ip;
 
-    if (allowedIps.includes(userIp)) {
+    if (userIp && allowedIps.includes(userIp)) {
       // Add a header to notify the frontend that maintenance is on, but access is granted
       res.setHeader("X-Maintenance-Mode", "active-bypass");
       return next();
