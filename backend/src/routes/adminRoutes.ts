@@ -14,6 +14,8 @@ import {
   removeAdminSubscription,
   updateAdminServer,
   updateAdminUser,
+  getMaintenanceSettings,
+  updateMaintenanceSettings,
   resendVerificationCode,
   removeAdminUser
 } from "../controllers/adminController.js";
@@ -23,6 +25,8 @@ import { requireAdmin, requireAuth } from "../middleware/auth.js";
 export const adminRoutes = Router();
 
 adminRoutes.use(requireAuth, requireAdmin);
+adminRoutes.get("/maintenance", getMaintenanceSettings);
+adminRoutes.put("/maintenance", updateMaintenanceSettings);
 adminRoutes.get("/users", getAdminUsers);
 adminRoutes.get("/users/:userId", getAdminUserDetails);
 adminRoutes.get("/servers", getAdminServers);

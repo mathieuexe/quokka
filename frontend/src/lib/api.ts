@@ -34,3 +34,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   return data as T;
 }
+
+export type MaintenanceSettings = {
+  is_enabled: boolean;
+  message: string;
+};
+
+export async function getMaintenanceSettings(token: string): Promise<MaintenanceSettings> {
+  return apiRequest<MaintenanceSettings>("/admin/maintenance", { token });
+}
+
+export async function updateMaintenanceSettings(
+  token: string,
+  settings: MaintenanceSettings
+): Promise<{ message: string }> {
+  return apiRequest("/admin/maintenance", {
+    method: "PUT",
+    token,
+    body: settings
+  });
+}

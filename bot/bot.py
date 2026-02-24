@@ -37,6 +37,7 @@ MODERATOR_ROLE_2 = os.getenv('MODERATOR_ROLE_2')
 MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
 DEFAULT_NOTIFICATION_CHANNEL_ID = "01KHCH5Y324FH1HP45S6JZJ1H4"
 NOTIFICATION_CHANNEL_ID = os.getenv('NOTIFICATION_CHANNEL_ID') or WELCOME_CHANNEL_ID or LEAVE_CHANNEL_ID or DEFAULT_NOTIFICATION_CHANNEL_ID
+NEW_MEMBER_ROLE_ID = "01KHCHDCWRMYZM3W81ZBZWRSZN"
 GRADIENT_ROLE_ID = os.getenv('GRADIENT_ROLE_ID') or "01KHCAJ20T9SATYM1PDTYXKZ61"
 GRADIENT_COLORS = [
     "#c00000",
@@ -723,7 +724,11 @@ async def on_member_join(event, /):
         
         await channel.send(welcome_message)
         print(f'[OK] Message envoyé pour {member.name}')
-        
+
+        # Attribuer le rôle
+        await member.add_role(NEW_MEMBER_ROLE_ID)
+        print(f'[OK] Rôle {NEW_MEMBER_ROLE_ID} attribué à {member.name}')
+
     except Exception as e:
         print(f'[ERREUR] Bienvenue: {e}')
 

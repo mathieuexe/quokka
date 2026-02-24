@@ -15,6 +15,15 @@ import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "
 import { createVerificationCode, createTwoFactorCode } from "../repositories/verificationRepository.js";
 import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
+import {
+  updateMaintenanceSettings as updateMaintenanceSettingsInDb,
+  getMaintenanceSettings as getMaintenanceSettingsFromDb
+} from "../repositories/systemRepository.js";
+
+const maintenanceSchema = z.object({
+  is_enabled: z.boolean(),
+  message: z.string().max(1000).default("")
+});
 
 const promoteSchema = z
   .object({
@@ -340,4 +349,15 @@ export async function removeAdminUser(req: Request, res: Response): Promise<void
 
   await deleteUser(payload.userId);
   res.json({ message: "Utilisateur supprimé avec succès." });
+}
+
+export async function getMaintenanceSettings(_req: Request, res: Response): Promise<void> {
+  const settings = await getMaintenanceSettingsFromDb();
+  res.json(settings);
+}
+
+export async function updateMaintenanceSettings(req: Request, res: Response): Promise<void> {
+  const payload = maintenanceSchema.parse(req.body);
+  await updateMaintenanceSettingsInDb(payload);
+  res.json({ message: "Paramètres de maintenance mis à jour." });
 }
