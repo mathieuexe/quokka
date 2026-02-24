@@ -38,6 +38,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 export type MaintenanceSettings = {
   is_enabled: boolean;
   message: string;
+  allowed_ips: string;
 };
 
 export async function getMaintenanceSettings(token: string): Promise<MaintenanceSettings> {

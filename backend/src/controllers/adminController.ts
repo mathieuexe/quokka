@@ -22,7 +22,8 @@ import {
 
 const maintenanceSchema = z.object({
   is_enabled: z.boolean(),
-  message: z.string().max(1000).default("")
+  message: z.string().max(1000).default(""),
+  allowed_ips: z.string().max(1000).optional()
 });
 
 const promoteSchema = z
@@ -358,6 +359,9 @@ export async function getMaintenanceSettings(_req: Request, res: Response): Prom
 
 export async function updateMaintenanceSettings(req: Request, res: Response): Promise<void> {
   const payload = maintenanceSchema.parse(req.body);
-  await updateMaintenanceSettingsInDb(payload);
+  await updateMaintenanceSettingsInDb({
+    ...payload,
+    allowed_ips: payload.allowed_ips ?? ""
+  });
   res.json({ message: "Paramètres de maintenance mis à jour." });
 }

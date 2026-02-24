@@ -6,7 +6,7 @@ import { getMaintenanceSettings, updateMaintenanceSettings, MaintenanceSettings 
 export function AdminSettingsPage(): JSX.Element {
   const { token } = useAuth();
   const { showToast } = useToast();
-  const [settings, setSettings] = useState<MaintenanceSettings>({ is_enabled: false, message: "" });
+  const [settings, setSettings] = useState<MaintenanceSettings>({ is_enabled: false, message: "", allowed_ips: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +69,14 @@ export function AdminSettingsPage(): JSX.Element {
               rows={5}
               value={settings.message}
               onChange={(event) => setSettings({ ...settings, message: event.target.value })}
+            />
+          </label>
+          <label>
+            Adresses IP autorisées (séparées par des virgules)
+            <textarea
+              rows={2}
+              value={settings.allowed_ips}
+              onChange={(event) => setSettings({ ...settings, allowed_ips: event.target.value })}
             />
           </label>
           <button className="btn" type="submit" disabled={saving}>

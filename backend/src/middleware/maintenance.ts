@@ -1,31 +1,31 @@
 import type { NextFunction, Request, Response } from "express";
-import { db } from "../config/db.js";
-
-const PUBLIC_PATHS = new Set([
-  "/api/health",
-  "/api/maintenance",
-  "/api/auth/login",
-  "/api/auth/register",
-  "/api/payments/webhook"
-]);
+import { getMaintenanceSettings } from "../repositories/systemRepository.js";
 
 export async function maintenanceGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
-  if (PUBLIC_PATHS.has(req.path)) {
-    next();
-    return;
+  // Allow access to maintenance page and API
+  if (req.path.startsWith("/api/maintenance") || req.path.startsWith("/maintenance")) {
+    return next();
   }
 
-  const result = await db.query<{
-    is_enabled: boolean;
-    message: string;
-  }>("SELECT is_enabled, message FROM maintenance_settings WHERE id = 1");
+  const settings = await getMaintenanceSettings();
+  if (settings.is_enabled) {
+    const allowedIps = settings.allowed_ips?.split(",").map(ip => ip.trim()) || [];
+    const userIp = req.ip;
 
-  const maintenance = result.rows[0];
-  if (maintenance?.is_enabled) {
-    res.status(503).json({
-      message: maintenance.message,
-      maintenance: true
-    });
+    if (allowedIps.includes(userIp)) {
+      // Add a header to notify the frontend that maintenance is on, but access is granted
+      res.setHeader("X-Maintenance-Mode", "active-bypass");
+      return next();
+    }
+
+    // For API requests, send a 503 response
+    if (req.path.startsWith("/api/")) {
+      res.status(503).json({ message: "Service temporarily unavailable due to maintenance." });
+      return;
+    }
+
+    // For other requests, redirect to the maintenance page
+    res.redirect("/maintenance");
     return;
   }
 

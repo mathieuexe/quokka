@@ -138,6 +138,8 @@ function setMetaProperty(property: string, content: string): void {
   element.setAttribute("content", content);
 }
 
+import { MaintenanceBanner } from "./components/MaintenanceBanner";
+
 function PrivateRoute({ children }: { children: JSX.Element }): JSX.Element {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? children : <Navigate to="/login" replace />;
@@ -152,6 +154,7 @@ function AdminRoute({ children }: { children: JSX.Element }): JSX.Element {
 
 export default function App(): JSX.Element {
   const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+  const [showMaintenanceBanner, setShowMaintenanceBanner] = useState(false);
   const location = useLocation();
   const isAdminArea = location.pathname.startsWith("/admin");
   const betaVersion = "v1.2";
@@ -165,6 +168,9 @@ export default function App(): JSX.Element {
     let cancelled = false;
     void fetch(`${API_URL}/maintenance`)
       .then(async (response) => {
+        if (response.headers.get("X-Maintenance-Mode") === "active-bypass") {
+          setShowMaintenanceBanner(true);
+        }
         const data = (await response.json().catch(() => ({}))) as {
           maintenance?: { is_enabled?: boolean };
         };
@@ -210,17 +216,17 @@ export default function App(): JSX.Element {
     }
   }, [location.pathname]);
 
-  if (maintenanceEnabled) {
+  if (maintenanceEnabled && !showMaintenanceBanner) {
     return (
       <div className="app-shell">
         <MaintenancePage />
-        <Footer />
       </div>
     );
   }
 
   return (
     <div className={`app-shell ${isAdminArea ? "app-shell-admin" : ""}`}>
+      {showMaintenanceBanner && <MaintenanceBanner />}
       {!isAdminArea && (
         <div className="site-header-announcement" role="status" aria-live="polite">
           <div className="site-header-announcement-track">
