@@ -42,14 +42,26 @@ function isImgurUrl(url) {
     }
 }
 export async function getHomeServers(req, res) {
-    await ensureMonthlyLikesReset();
-    const search = typeof req.query.search === "string" ? req.query.search : undefined;
-    const servers = await listServersByPriority(search);
-    res.json({ servers });
+    try {
+        await ensureMonthlyLikesReset();
+        const search = typeof req.query.search === "string" ? req.query.search : undefined;
+        const servers = await listServersByPriority(search);
+        res.json({ servers });
+    }
+    catch (error) {
+        console.error("Home servers load failed:", error);
+        res.json({ servers: [] });
+    }
 }
 export async function getCategories(_req, res) {
-    const categories = await listCategories();
-    res.json({ categories });
+    try {
+        const categories = await listCategories();
+        res.json({ categories });
+    }
+    catch (error) {
+        console.error("Categories load failed:", error);
+        res.json({ categories: [] });
+    }
 }
 export async function getServer(req, res) {
     await ensureMonthlyLikesReset();

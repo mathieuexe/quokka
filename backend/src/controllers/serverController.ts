@@ -57,15 +57,25 @@ function isImgurUrl(url: string): boolean {
 }
 
 export async function getHomeServers(req: Request, res: Response): Promise<void> {
-  await ensureMonthlyLikesReset();
-  const search = typeof req.query.search === "string" ? req.query.search : undefined;
-  const servers = await listServersByPriority(search);
-  res.json({ servers });
+  try {
+    await ensureMonthlyLikesReset();
+    const search = typeof req.query.search === "string" ? req.query.search : undefined;
+    const servers = await listServersByPriority(search);
+    res.json({ servers });
+  } catch (error) {
+    console.error("Home servers load failed:", error);
+    res.json({ servers: [] });
+  }
 }
 
 export async function getCategories(_req: Request, res: Response): Promise<void> {
-  const categories = await listCategories();
-  res.json({ categories });
+  try {
+    const categories = await listCategories();
+    res.json({ categories });
+  } catch (error) {
+    console.error("Categories load failed:", error);
+    res.json({ categories: [] });
+  }
 }
 
 export async function getServer(req: Request, res: Response): Promise<void> {
