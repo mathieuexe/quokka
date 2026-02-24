@@ -1,7 +1,27 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { apiRequest, MaintenanceSettings } from "../lib/api";
+
+type MaintenanceResponse = {
+  maintenance: MaintenanceSettings;
+};
 
 export function MaintenancePage(): JSX.Element {
   const { t } = useTranslation();
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    async function fetchMaintenanceMessage(): Promise<void> {
+      try {
+        const data = await apiRequest<MaintenanceResponse>("/maintenance");
+        setMessage(data.maintenance.message);
+      } catch (error) {
+        // Fallback message
+        setMessage(t("maintenance.message"));
+      }
+    }
+    void fetchMaintenanceMessage();
+  }, [t]);
 
   return (
     <section className="maintenance-page">
@@ -10,7 +30,7 @@ export function MaintenancePage(): JSX.Element {
       </a>
 
       <article className="maintenance-card">
-        <p>{t("maintenance.message")}</p>
+        <p>{message || t("maintenance.message")}</p>
         <p>{t("maintenance.followUs")}</p>
 
         <div className="maintenance-socials">

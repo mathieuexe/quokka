@@ -1,32 +1,24 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { apiRequest } from "../lib/api";
-
-type MaintenanceResponse = {
-  maintenance: {
-    is_enabled: boolean;
-    message: string;
-  };
-};
+import { getMaintenanceSettings, updateMaintenanceSettings, MaintenanceSettings } from "../lib/api";
 
 export function AdminSettingsPage(): JSX.Element {
   const { token } = useAuth();
   const { showToast } = useToast();
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [message, setMessage] = useState("Le site est en maintenance.");
+  const [settings, setSettings] = useState<MaintenanceSettings>({ is_enabled: false, message: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadSettings(): Promise<void> {
+      if (!token) return;
       setLoading(true);
       setError(null);
       try {
-        const result = await apiRequest<MaintenanceResponse>("/maintenance");
-        setIsEnabled(result.maintenance?.is_enabled ?? false);
-        setMessage(result.maintenance?.message ?? "Le site est en maintenance.");
+        const result = await getMaintenanceSettings(token);
+        setSettings(result);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Chargement des paramètres impossible.");
       } finally {
@@ -34,7 +26,7 @@ export function AdminSettingsPage(): JSX.Element {
       }
     }
     void loadSettings();
-  }, []);
+  }, [token]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -42,11 +34,7 @@ export function AdminSettingsPage(): JSX.Element {
     setSaving(true);
     setError(null);
     try {
-      await apiRequest<{ message: string }>("/maintenance", {
-        method: "PATCH",
-        token,
-        body: { isEnabled, message }
-      });
+      await updateMaintenanceSettings(token, settings);
       showToast("Paramètres de maintenance enregistrés.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Mise à jour impossible.");
@@ -68,12 +56,20 @@ export function AdminSettingsPage(): JSX.Element {
         <form className="form" onSubmit={onSubmit}>
           {error && <p className="error-text">{error}</p>}
           <label className="inline-control">
-            <input type="checkbox" checked={isEnabled} onChange={(event) => setIsEnabled(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={settings.is_enabled}
+              onChange={(event) => setSettings({ ...settings, is_enabled: event.target.checked })}
+            />
             Activer le mode maintenance
           </label>
           <label>
             Message affiché aux visiteurs
-            <textarea rows={5} value={message} onChange={(event) => setMessage(event.target.value)} />
+            <textarea
+              rows={5}
+              value={settings.message}
+              onChange={(event) => setSettings({ ...settings, message: event.target.value })}
+            />
           </label>
           <button className="btn" type="submit" disabled={saving}>
             {saving ? "Enregistrement..." : "Enregistrer"}
