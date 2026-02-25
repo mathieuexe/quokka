@@ -1,10 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
+import viteImagemin from "vite-plugin-imagemin";
 
 export default defineConfig({
   plugins: [
     react(),
+    viteImagemin({
+      gifsicle: { optimizationLevel: 3 },
+      mozjpeg: { quality: 75 },
+      pngquant: { quality: [0.7, 0.85] },
+      svgo: {
+        plugins: [
+          { name: "removeViewBox", active: false },
+          { name: "removeEmptyAttrs", active: false }
+        ]
+      }
+    }),
     visualizer({
       filename: "dist/stats.html",
       open: false,

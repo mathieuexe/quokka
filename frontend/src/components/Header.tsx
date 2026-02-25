@@ -17,17 +17,41 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAdmin = user?.role === "admin";
 
+  function warmRoute(target: "dashboard" | "chat" | "addServer" | "tickets" | "adminLayout"): void {
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+    };
+    const run = () => {
+      if (target === "dashboard") {
+        void import("../pages/DashboardPage");
+      } else if (target === "chat") {
+        void import("../pages/ChatPage");
+      } else if (target === "addServer") {
+        void import("../pages/AddServerPage");
+      } else if (target === "tickets") {
+        void import("../pages/TicketsPage");
+      } else if (target === "adminLayout") {
+        void import("../admin/AdminLayout");
+      }
+    };
+    if (typeof win.requestIdleCallback === "function") {
+      win.requestIdleCallback(run, { timeout: 1500 });
+    } else {
+      window.setTimeout(run, 500);
+    }
+  }
+
   const navItems = useMemo(() => {
     const base = [
-      { to: "/", label: t("nav.home") },
-      { to: "/chat", label: t("nav.liveChat") },
-      { to: "/add-server", label: t("nav.addServer") }
+      { to: "/", label: t("nav.home"), warm: () => warmRoute("dashboard") },
+      { to: "/chat", label: t("nav.liveChat"), warm: () => warmRoute("chat") },
+      { to: "/add-server", label: t("nav.addServer"), warm: () => warmRoute("addServer") }
     ];
     if (isAuthenticated) {
-      base.push({ to: "/tickets", label: t("nav.support") });
+      base.push({ to: "/tickets", label: t("nav.support"), warm: () => warmRoute("tickets") });
     }
     if (isAdmin) {
-      base.push({ to: "/admin", label: t("nav.adminPanel") });
+      base.push({ to: "/admin", label: t("nav.adminPanel"), warm: () => warmRoute("adminLayout") });
     }
     return base;
   }, [isAdmin, isAuthenticated, t]);
@@ -57,7 +81,14 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
 
         <nav className="site-header-tabs" aria-label={t("header.mainMenu")}>
           {navItems.map((item) => (
-            <NavLink key={item.to} to={item.to} onClick={closeMenus} className={({ isActive }) => `site-header-tab ${isActive ? "is-active" : ""}`}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onMouseEnter={item.warm}
+              onFocus={item.warm}
+              onClick={closeMenus}
+              className={({ isActive }) => `site-header-tab ${isActive ? "is-active" : ""}`}
+            >
               {item.label}
             </NavLink>
           ))}
@@ -141,7 +172,14 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
           <div className="site-header-mobile-drawer" role="dialog" aria-label={t("header.menu")} onClick={(event) => event.stopPropagation()}>
             <nav className="site-header-mobile-nav" aria-label={t("header.navigation")}>
               {navItems.map((item) => (
-                <NavLink key={item.to} to={item.to} onClick={closeMenus} className="site-header-mobile-link">
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onMouseEnter={item.warm}
+                  onFocus={item.warm}
+                  onClick={closeMenus}
+                  className="site-header-mobile-link"
+                >
                   {item.label}
                 </NavLink>
               ))}

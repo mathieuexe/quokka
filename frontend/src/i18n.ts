@@ -4,38 +4,33 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 import fr from "./locales/fr.json";
 import en from "./locales/en.json";
-import es from "./locales/es.json";
-import de from "./locales/de.json";
-import it from "./locales/it.json";
-import pt from "./locales/pt.json";
-import zh from "./locales/zh.json";
-import ja from "./locales/ja.json";
-import hi from "./locales/hi.json";
-import ru from "./locales/ru.json";
-import uk from "./locales/uk.json";
-
-// Configuration des ressources de traduction
 const resources = {
   fr: { translation: fr },
-  en: { translation: en },
-  es: { translation: es },
-  de: { translation: de },
-  it: { translation: it },
-  pt: { translation: pt },
-  zh: { translation: zh },
-  ja: { translation: ja },
-  hi: { translation: hi },
-  ru: { translation: ru },
-  uk: { translation: uk }
+  en: { translation: en }
 };
 
-i18n
-  // Détection automatique de la langue du navigateur
-  .use(LanguageDetector)
-  // Intégration avec React
-  .use(initReactI18next)
-  // Initialisation
-  .init({
+const languageLoaders: Record<string, () => Promise<{ default: unknown }>> = {
+  es: () => import("./locales/es.json"),
+  de: () => import("./locales/de.json"),
+  it: () => import("./locales/it.json"),
+  pt: () => import("./locales/pt.json"),
+  zh: () => import("./locales/zh.json"),
+  ja: () => import("./locales/ja.json"),
+  hi: () => import("./locales/hi.json"),
+  ru: () => import("./locales/ru.json"),
+  uk: () => import("./locales/uk.json")
+};
+
+async function ensureLanguageResources(language: string): Promise<void> {
+  const normalized = language.split("-")[0];
+  if (i18n.hasResourceBundle(normalized, "translation")) return;
+  const loader = languageLoaders[normalized];
+  if (!loader) return;
+  const module = await loader();
+  i18n.addResourceBundle(normalized, "translation", module.default ?? module, true, true);
+}
+
+const initPromise = i18n.use(LanguageDetector).use(initReactI18next).init({
     resources,
     debug: false, // Mettre à true pour voir les logs en dev
     
@@ -83,5 +78,10 @@ i18n
       default: ["fr"]
     }
   });
+
+void initPromise.then(() => ensureLanguageResources(i18n.language));
+i18n.on("languageChanged", (language) => {
+  void ensureLanguageResources(language);
+});
 
 export default i18n;
