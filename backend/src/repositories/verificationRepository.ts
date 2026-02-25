@@ -18,6 +18,13 @@ export type TwoFactorCode = {
   created_at: string;
 };
 
+export type UserEmailEvent = {
+  type: "verification" | "2fa";
+  created_at: string;
+  expires_at: string;
+  used: boolean;
+};
+
 // ==================== VERIFICATION EMAIL ====================
 
 export async function createVerificationCode(userId: string, code: string): Promise<VerificationCode> {
@@ -120,6 +127,31 @@ export async function markTwoFactorCodeAsUsed(id: string): Promise<void> {
     `,
     [id]
   );
+}
+
+export async function listUserEmailEvents(userId: string): Promise<UserEmailEvent[]> {
+  const result = await db.query<UserEmailEvent>(
+    `
+      SELECT
+        'verification'::text AS type,
+        created_at,
+        expires_at,
+        used
+      FROM email_verification_codes
+      WHERE user_id = $1
+      UNION ALL
+      SELECT
+        '2fa'::text AS type,
+        created_at,
+        expires_at,
+        used
+      FROM two_factor_codes
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+    `,
+    [userId]
+  );
+  return result.rows;
 }
 
 export async function deleteTwoFactorCodesForUser(userId: string): Promise<void> {

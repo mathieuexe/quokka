@@ -114,6 +114,22 @@ export function AdminServersPage(): JSX.Element {
     }
   }
 
+  async function deleteServer(serverId: string, serverName: string): Promise<void> {
+    if (!token) return;
+    const confirmation = window.prompt(`Suppression irréversible.\nTape "${serverName}" pour confirmer.`);
+    if (confirmation !== serverName) return;
+    try {
+      await apiRequest<void>(`/admin/servers/${serverId}`, {
+        method: "DELETE",
+        token
+      });
+      showToast("Serveur supprimé.");
+      await loadServers();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suppression du serveur impossible.");
+    }
+  }
+
   return (
     <div className="admin-page">
       <div className="admin-page-head">
@@ -216,6 +232,9 @@ export function AdminServersPage(): JSX.Element {
                 </button>
                 <button className="btn btn-ghost" type="button" onClick={() => void setHidden(server.id, !server.is_hidden)}>
                   {server.is_hidden ? "Démasquer" : "Masquer"}
+                </button>
+                <button className="btn btn-danger" type="button" onClick={() => void deleteServer(server.id, server.name)}>
+                  Supprimer
                 </button>
                 <Link className="btn" to={`/servers/${server.id}`}>
                   Voir le serveur

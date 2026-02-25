@@ -9,6 +9,21 @@ type UserDetailsResponse = {
   user: User;
   servers: Server[];
   availableBadges: Badge[];
+  subscriptions: Array<{
+    id: string;
+    server_id: string;
+    server_name: string;
+    type: "quokka_plus" | "essentiel";
+    start_date: string;
+    end_date: string;
+    premium_slot: number | null;
+  }>;
+  emailEvents: Array<{
+    type: "verification" | "2fa";
+    created_at: string;
+    expires_at: string;
+    used: boolean;
+  }>;
 };
 
 export function AdminUserDetailsPage(): JSX.Element {
@@ -315,6 +330,53 @@ export function AdminUserDetailsPage(): JSX.Element {
                   <Link className="btn btn-ghost" to={`/servers/${server.id}`}>
                     Ouvrir la fiche serveur
                   </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
+
+      <article className="card">
+        <h3>Abonnements actifs et historiques</h3>
+        {details.subscriptions.length === 0 ? (
+          <p>Aucun abonnement associé.</p>
+        ) : (
+          <div className="admin-list-grid">
+            {details.subscriptions.map((subscription) => (
+              <div key={subscription.id} className="admin-list-item static">
+                <div>
+                  <h3>{subscription.server_name}</h3>
+                  <p>Type : {subscription.type}</p>
+                </div>
+                <div className="admin-list-item-meta">
+                  <span className="tag">Début : {new Date(subscription.start_date).toLocaleDateString("fr-FR")}</span>
+                  <span className="tag">Fin : {new Date(subscription.end_date).toLocaleDateString("fr-FR")}</span>
+                  {subscription.premium_slot && <span className="tag">Slot #{subscription.premium_slot}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
+
+      <article className="card">
+        <h3>Emails envoyés par nos services</h3>
+        {details.emailEvents.length === 0 ? (
+          <p>Aucun email enregistré.</p>
+        ) : (
+          <div className="admin-list-grid">
+            {details.emailEvents.map((event, index) => (
+              <div key={`${event.type}-${event.created_at}-${index}`} className="admin-list-item static">
+                <div>
+                  <h3>{event.type === "verification" ? "Vérification email" : "Code 2FA"}</h3>
+                  <p>Envoyé le {new Date(event.created_at).toLocaleString("fr-FR")}</p>
+                </div>
+                <div className="admin-list-item-meta">
+                  <span className={`status-pill ${event.used ? "status-paid" : "status-pending"}`}>
+                    {event.used ? "Utilisé" : "En attente"}
+                  </span>
+                  <span className="tag">Expire le {new Date(event.expires_at).toLocaleString("fr-FR")}</span>
                 </div>
               </div>
             ))}

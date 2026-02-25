@@ -14,6 +14,7 @@ type Ticket = {
   server_name: string | null;
   assigned_admin_pseudo: string | null;
   created_at: string;
+  updated_at: string;
   last_message_at: string;
   server_url: string | null;
 };
@@ -105,6 +106,43 @@ const priorityLabels: Record<number, string> = {
   2: "Minimal",
   1: "Minimal"
 };
+
+const REOPEN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function normalizeStatus(status: string): string {
+  return status
+    .toLowerCase()
+    .replace("’", "'")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function getStatusClass(status: string): string {
+  const normalized = normalizeStatus(status);
+  if (normalized === "en attente d'attribution") return "status-ticket-waiting";
+  if (normalized === "ouvert") return "status-ticket-open";
+  if (normalized === "en cours") return "status-ticket-progress";
+  if (normalized === "en attente utilisateur" || normalized === "en attente client") return "status-ticket-waiting-client";
+  if (normalized === "resolu") return "status-ticket-resolved";
+  if (normalized === "cloture") return "status-ticket-closed";
+  if (normalized === "en investigation") return "status-ticket-investigation";
+  return "status-pending";
+}
+
+function isClosedStatus(status: string): boolean {
+  const normalized = normalizeStatus(status);
+  return normalized === "resolu" || normalized === "cloture";
+}
+
+function getReplyState(ticket: Ticket | null): { allowed: boolean; canReopen: boolean } {
+  if (!ticket) return { allowed: false, canReopen: false };
+  if (!isClosedStatus(ticket.status)) return { allowed: true, canReopen: false };
+  const closedAt = new Date(ticket.updated_at).getTime();
+  if (!Number.isFinite(closedAt)) return { allowed: false, canReopen: false };
+  const canReopen = Date.now() - closedAt <= REOPEN_WINDOW_MS;
+  return { allowed: canReopen, canReopen };
+}
 
 export function TicketsPage(): JSX.Element {
   const { token } = useAuth();
@@ -268,6 +306,11 @@ export function TicketsPage(): JSX.Element {
   async function onReply(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!token || !selectedTicket) return;
+    const replyState = getReplyState(selectedTicket);
+    if (!replyState.allowed) {
+      setDetailError("Ce ticket est résolu ou clôturé. La réponse n'est plus possible.");
+      return;
+    }
     setDetailError(null);
     try {
       await apiRequest<{ message: TicketMessage }>(`/tickets/${selectedTicket.id}/messages`, {
@@ -286,6 +329,8 @@ export function TicketsPage(): JSX.Element {
       setDetailError(e instanceof Error ? e.message : "Envoi du message impossible.");
     }
   }
+
+  const replyState = getReplyState(selectedTicket);
 
   return (
     <section className="page tickets-page">
@@ -427,7 +472,7 @@ export function TicketsPage(): JSX.Element {
                     {ticket.subcategory && <p>{ticket.subcategory}</p>}
                   </div>
                   <div className="tickets-list-meta">
-                    <span className="status-pill status-pending">{ticket.status}</span>
+                    <span className={`status-pill ${getStatusClass(ticket.status)}`}>{ticket.status}</span>
                     <span className="tag">Priorité {ticket.priority}</span>
                     <span className="tag">{new Date(ticket.last_message_at).toLocaleDateString("fr-FR")}</span>
                   </div>
@@ -457,7 +502,7 @@ export function TicketsPage(): JSX.Element {
                   {selectedTicket.server_url && <p>URL : {selectedTicket.server_url}</p>}
                 </div>
                 <div className="tickets-detail-meta">
-                  <span className="status-pill status-pending">{selectedTicket.status}</span>
+                  <span className={`status-pill ${getStatusClass(selectedTicket.status)}`}>{selectedTicket.status}</span>
                   <span className="tag">Priorité {selectedTicket.priority}</span>
                   {selectedTicket.assigned_admin_pseudo && <span className="tag">Assigné à {selectedTicket.assigned_admin_pseudo}</span>}
                 </div>
@@ -482,44 +527,49 @@ export function TicketsPage(): JSX.Element {
                   </div>
                 ))}
               </div>
-              <form className="form tickets-reply-form" onSubmit={onReply}>
-                <label>
-                  Répondre
-                  <textarea rows={4} value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)} required />
-                </label>
-                <div className="tickets-attachments">
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.png,.jpg,.jpeg,.mp3,.wav,.mp4,.gif,.xlsv,.csv"
-                    onChange={(event) => {
-                      void uploadFiles(event.target.files, setReplyAttachments, replyAttachments, setReplyUploading, setDetailError);
-                      event.currentTarget.value = "";
-                    }}
-                    disabled={replyUploading}
-                  />
-                  {replyUploading && <p>Envoi des fichiers en cours...</p>}
-                  {replyAttachments.map((item, index) => (
-                    <div key={`reply-attachment-${index}`} className="tickets-attachment-row">
-                      <input
-                        value={item}
-                        onChange={(event) => updateAttachment(index, event.target.value, setReplyAttachments, replyAttachments)}
-                        placeholder="https://exemple.com/preuve.png"
-                      />
-                      <button className="btn btn-ghost" type="button" onClick={() => removeAttachment(index, setReplyAttachments, replyAttachments)}>
-                        Retirer
-                      </button>
-                    </div>
-                  ))}
-                  <button className="btn btn-ghost" type="button" onClick={() => addAttachment(setReplyAttachments, replyAttachments)}>
-                    Ajouter une pièce jointe
+              {replyState.allowed ? (
+                <form className="form tickets-reply-form" onSubmit={onReply}>
+                  <label>
+                    Répondre
+                    <textarea rows={4} value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)} required />
+                  </label>
+                  {replyState.canReopen && <p>Votre réponse rouvrira automatiquement ce ticket.</p>}
+                  <div className="tickets-attachments">
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.mp3,.wav,.mp4,.gif,.xlsv,.csv"
+                      onChange={(event) => {
+                        void uploadFiles(event.target.files, setReplyAttachments, replyAttachments, setReplyUploading, setDetailError);
+                        event.currentTarget.value = "";
+                      }}
+                      disabled={replyUploading}
+                    />
+                    {replyUploading && <p>Envoi des fichiers en cours...</p>}
+                    {replyAttachments.map((item, index) => (
+                      <div key={`reply-attachment-${index}`} className="tickets-attachment-row">
+                        <input
+                          value={item}
+                          onChange={(event) => updateAttachment(index, event.target.value, setReplyAttachments, replyAttachments)}
+                          placeholder="https://exemple.com/preuve.png"
+                        />
+                        <button className="btn btn-ghost" type="button" onClick={() => removeAttachment(index, setReplyAttachments, replyAttachments)}>
+                          Retirer
+                        </button>
+                      </div>
+                    ))}
+                    <button className="btn btn-ghost" type="button" onClick={() => addAttachment(setReplyAttachments, replyAttachments)}>
+                      Ajouter une pièce jointe
+                    </button>
+                  </div>
+                  {detailError && <p className="error-text">{detailError}</p>}
+                  <button className="btn" type="submit">
+                    Envoyer la réponse
                   </button>
-                </div>
-                {detailError && <p className="error-text">{detailError}</p>}
-                <button className="btn" type="submit">
-                  Envoyer la réponse
-                </button>
-              </form>
+                </form>
+              ) : (
+                <p className="error-text">Ce ticket est résolu ou clôturé. Vous pouvez le rouvrir jusqu’à 7 jours après sa résolution ou clôture.</p>
+              )}
             </>
           )}
         </article>

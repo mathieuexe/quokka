@@ -54,6 +54,7 @@ const STATUSES = [
   "En attente utilisateur",
   "En cours",
   "En investigation",
+  "En pause",
   "Résolu",
   "Clôturé"
 ];
@@ -109,6 +110,28 @@ const priorityLabels: Record<number, string> = {
   1: "Minimal"
 };
 
+function normalizeStatus(status: string): string {
+  return status
+    .toLowerCase()
+    .replace("’", "'")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function getStatusClass(status: string): string {
+  const normalized = normalizeStatus(status);
+  if (normalized === "en attente d'attribution") return "status-ticket-waiting";
+  if (normalized === "ouvert") return "status-ticket-open";
+  if (normalized === "en cours") return "status-ticket-progress";
+  if (normalized === "en attente utilisateur" || normalized === "en attente client") return "status-ticket-waiting-client";
+  if (normalized === "resolu") return "status-ticket-resolved";
+  if (normalized === "cloture") return "status-ticket-closed";
+  if (normalized === "en investigation") return "status-ticket-investigation";
+  if (normalized === "en pause") return "status-ticket-paused";
+  return "status-pending";
+}
+
 export function AdminTicketsPage(): JSX.Element {
   const { token, user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -134,11 +157,22 @@ export function AdminTicketsPage(): JSX.Element {
   const [editCategory, setEditCategory] = useState("");
   const [editSubcategory, setEditSubcategory] = useState("");
   const [editAssignedAdmin, setEditAssignedAdmin] = useState<string>("");
+  const [createUserId, setCreateUserId] = useState("");
+  const [createCategory, setCreateCategory] = useState(CATEGORY_CONFIG[0]?.label ?? "");
+  const [createSubcategory, setCreateSubcategory] = useState(CATEGORY_CONFIG[0]?.subcategories[0] ?? "");
+  const [createMessage, setCreateMessage] = useState("");
+  const [createServerUrl, setCreateServerUrl] = useState("");
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const adminUsers = useMemo(() => users.filter((entry) => entry.role === "admin"), [users]);
   const categoryConfig = useMemo(
     () => CATEGORY_CONFIG.find((entry) => entry.label === editCategory) ?? CATEGORY_CONFIG[0],
     [editCategory]
+  );
+  const createCategoryConfig = useMemo(
+    () => CATEGORY_CONFIG.find((entry) => entry.label === createCategory) ?? CATEGORY_CONFIG[0],
+    [createCategory]
   );
 
   useEffect(() => {
@@ -186,6 +220,14 @@ export function AdminTicketsPage(): JSX.Element {
       setEditSubcategory("");
     }
   }, [categoryConfig]);
+
+  useEffect(() => {
+    if (createCategoryConfig.subcategories.length) {
+      setCreateSubcategory(createCategoryConfig.subcategories[0]);
+    } else {
+      setCreateSubcategory("");
+    }
+  }, [createCategoryConfig]);
 
   async function loadTicket(ticketId: string): Promise<void> {
     if (!token) return;
@@ -316,6 +358,33 @@ export function AdminTicketsPage(): JSX.Element {
     }
   }
 
+  async function onCreateTicket(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token || !createUserId || !createCategory || !createMessage.trim()) return;
+    setCreateSubmitting(true);
+    setCreateError(null);
+    try {
+      await apiRequest("/admin/tickets", {
+        method: "POST",
+        token,
+        body: {
+          userId: createUserId,
+          category: createCategory,
+          subcategory: createSubcategory || undefined,
+          message: createMessage.trim(),
+          serverUrl: createServerUrl.trim() || undefined
+        }
+      });
+      setCreateMessage("");
+      setCreateServerUrl("");
+      await refreshTickets();
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Création du ticket impossible.");
+    } finally {
+      setCreateSubmitting(false);
+    }
+  }
+
   return (
     <div className="admin-page">
       <article className="card admin-page-head">
@@ -367,6 +436,64 @@ export function AdminTicketsPage(): JSX.Element {
         </select>
       </article>
 
+      <article className="card">
+        <h3>Créer un ticket pour un utilisateur</h3>
+        <form className="form" onSubmit={onCreateTicket}>
+          {createError && <p className="error-text">{createError}</p>}
+          <div className="admin-filter-grid">
+            <label>
+              Utilisateur
+              <select value={createUserId} onChange={(event) => setCreateUserId(event.target.value)} required>
+                <option value="">Choisir un utilisateur</option>
+                {users
+                  .filter((entry) => entry.role === "user")
+                  .map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.pseudo}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Catégorie
+              <select value={createCategory} onChange={(event) => setCreateCategory(event.target.value)}>
+                {CATEGORY_CONFIG.map((entry) => (
+                  <option key={entry.label} value={entry.label}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Sous-catégorie
+              <select
+                value={createSubcategory}
+                onChange={(event) => setCreateSubcategory(event.target.value)}
+                disabled={!createCategoryConfig.subcategories.length}
+              >
+                {!createCategoryConfig.subcategories.length && <option value="">Aucune</option>}
+                {createCategoryConfig.subcategories.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              URL serveur
+              <input value={createServerUrl} onChange={(event) => setCreateServerUrl(event.target.value)} placeholder="https://..." />
+            </label>
+          </div>
+          <label>
+            Message initial
+            <textarea rows={4} value={createMessage} onChange={(event) => setCreateMessage(event.target.value)} required />
+          </label>
+          <button className="btn" type="submit" disabled={createSubmitting}>
+            {createSubmitting ? "Création..." : "Créer le ticket"}
+          </button>
+        </form>
+      </article>
+
       <div className="tickets-admin-layout">
         <article className="card tickets-list-card">
           <h3>Tickets reçus</h3>
@@ -377,7 +504,7 @@ export function AdminTicketsPage(): JSX.Element {
           ) : tickets.length === 0 ? (
             <p>Aucun ticket trouvé.</p>
           ) : (
-            <div className="tickets-list">
+            <div className="tickets-list tickets-list-horizontal">
               {tickets.map((ticket) => (
                 <button
                   key={ticket.id}
@@ -394,7 +521,7 @@ export function AdminTicketsPage(): JSX.Element {
                     <p>{ticket.category}</p>
                   </div>
                   <div className="tickets-list-meta">
-                    <span className="status-pill status-pending">{ticket.status}</span>
+                    <span className={`status-pill ${getStatusClass(ticket.status)}`}>{ticket.status}</span>
                     <span className="tag">Priorité {ticket.priority}</span>
                     {ticket.assigned_admin_pseudo && <span className="tag">{ticket.assigned_admin_pseudo}</span>}
                   </div>
@@ -425,7 +552,7 @@ export function AdminTicketsPage(): JSX.Element {
                   <p>Ouvert le {new Date(selectedTicket.created_at).toLocaleString("fr-FR")}</p>
                 </div>
                 <div className="tickets-detail-meta">
-                  <span className="status-pill status-pending">{selectedTicket.status}</span>
+                  <span className={`status-pill ${getStatusClass(selectedTicket.status)}`}>{selectedTicket.status}</span>
                   <span className="tag">Priorité {selectedTicket.priority}</span>
                 </div>
               </div>

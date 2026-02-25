@@ -2,8 +2,10 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { getServerOwner } from "../repositories/serverRepository.js";
 import { getSubscriptionOwner } from "../repositories/subscriptionRepository.js";
+import { findUserById } from "../repositories/userRepository.js";
 import {
   createTicketMessage,
+  createTicketWithAdminMessage,
   createTicketWithMessage,
   getTicketById,
   getTicketMessages,
@@ -18,9 +20,13 @@ const TICKET_STATUSES = [
   "En attente utilisateur",
   "En cours",
   "En investigation",
+  "En pause",
   "Résolu",
   "Clôturé"
 ] as const;
+
+const CLOSED_STATUSES = new Set(["Résolu", "Clôturé", "Cloturé"]);
+const REOPEN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 const CATEGORY_CONFIG = [
   {
@@ -65,39 +71,50 @@ const CATEGORY_CONFIG = [
 
 const allowedExtensions = new Set(["pdf", "png", "jpg", "jpeg", "mp3", "wav", "mp4", "gif", "xlsv", "csv"]);
 
-const createTicketSchema = z
-  .object({
-    category: z.string().trim().min(1),
-    subcategory: z.string().trim().optional(),
-    message: z.string().trim().min(1).max(4000),
-    attachments: z.array(z.string().url()).optional(),
-    serverId: z.string().uuid().optional(),
-    subscriptionId: z.string().uuid().optional(),
-    serverUrl: z.string().url().optional()
+const createTicketBaseSchema = z.object({
+  category: z.string().trim().min(1),
+  subcategory: z.string().trim().optional(),
+  message: z.string().trim().min(1).max(4000),
+  attachments: z.array(z.string().url()).optional(),
+  serverId: z.string().uuid().optional(),
+  subscriptionId: z.string().uuid().optional(),
+  serverUrl: z.string().url().optional()
+});
+
+const applyTicketRules = (
+  payload: z.infer<typeof createTicketBaseSchema>,
+  ctx: z.RefinementCtx
+): void => {
+  const config = CATEGORY_CONFIG.find((item) => item.label === payload.category);
+  if (!config) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Catégorie invalide.", path: ["category"] });
+    return;
+  }
+  if (payload.subcategory && !config.subcategories.includes(payload.subcategory)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Sous-catégorie invalide.", path: ["subcategory"] });
+  }
+  const attachments = payload.attachments?.filter((item) => item.trim().length) ?? [];
+  for (const attachment of attachments) {
+    if (!isAllowedAttachment(attachment)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Format de pièce jointe invalide.", path: ["attachments"] });
+      break;
+    }
+  }
+  if (config.requireServerUrl && !payload.serverUrl) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "URL du serveur requise.", path: ["serverUrl"] });
+  }
+  if (config.requireAttachments && attachments.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Au moins une pièce jointe est requise.", path: ["attachments"] });
+  }
+};
+
+const createTicketSchema = createTicketBaseSchema.superRefine(applyTicketRules);
+
+const adminCreateTicketSchema = createTicketBaseSchema
+  .extend({
+    userId: z.string().uuid()
   })
-  .superRefine((payload, ctx) => {
-    const config = CATEGORY_CONFIG.find((item) => item.label === payload.category);
-    if (!config) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Catégorie invalide.", path: ["category"] });
-      return;
-    }
-    if (payload.subcategory && !config.subcategories.includes(payload.subcategory)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Sous-catégorie invalide.", path: ["subcategory"] });
-    }
-    const attachments = payload.attachments?.filter((item) => item.trim().length) ?? [];
-    for (const attachment of attachments) {
-      if (!isAllowedAttachment(attachment)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Format de pièce jointe invalide.", path: ["attachments"] });
-        break;
-      }
-    }
-    if (config.requireServerUrl && !payload.serverUrl) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "URL du serveur requise.", path: ["serverUrl"] });
-    }
-    if (config.requireAttachments && attachments.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Au moins une pièce jointe est requise.", path: ["attachments"] });
-    }
-  });
+  .superRefine(applyTicketRules);
 
 const messageSchema = z.object({
   message: z.string().trim().min(1).max(4000),
@@ -150,6 +167,17 @@ function shouldSetStatusOnAdminReply(currentStatus: string): string | null {
 function shouldSetStatusOnUserReply(currentStatus: string): string | null {
   if (currentStatus === "En attente utilisateur") return "Ouvert";
   return null;
+}
+
+function isClosedStatus(status: string): boolean {
+  return CLOSED_STATUSES.has(status);
+}
+
+function canReopenTicket(ticket: { status: string; updated_at: string }): boolean {
+  if (!isClosedStatus(ticket.status)) return false;
+  const closedAt = new Date(ticket.updated_at).getTime();
+  if (!Number.isFinite(closedAt)) return false;
+  return Date.now() - closedAt <= REOPEN_WINDOW_MS;
 }
 
 function generateTicketReference(): string {
@@ -213,7 +241,7 @@ export async function postUserTicket(req: Request, res: Response): Promise<void>
     }
   }
 
-  const attachments = payload.attachments?.map((item) => item.trim()).filter(Boolean) ?? [];
+  const attachments = payload.attachments?.map((item: string) => item.trim()).filter(Boolean) ?? [];
   let reference = generateTicketReference();
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
@@ -267,7 +295,16 @@ export async function postUserTicketMessage(req: Request, res: Response): Promis
     }
   }
 
-  const nextStatus = shouldSetStatusOnUserReply(ticket.status);
+  const reopenAllowed = canReopenTicket(ticket);
+  if (isClosedStatus(ticket.status) && !reopenAllowed) {
+    res.status(403).json({ message: "Ce ticket est résolu ou clôturé. Vous pouvez le rouvrir jusqu'à 7 jours après sa résolution ou clôture." });
+    return;
+  }
+
+  let nextStatus = shouldSetStatusOnUserReply(ticket.status);
+  if (reopenAllowed) {
+    nextStatus = "Ouvert";
+  }
   const message = await createTicketMessage({
     ticketId,
     userId,
@@ -295,6 +332,69 @@ export async function getAdminTickets(req: Request, res: Response): Promise<void
     search: query.search
   });
   res.json({ tickets });
+}
+
+export async function postAdminTicket(req: Request, res: Response): Promise<void> {
+  const adminId = req.user?.sub;
+  if (!adminId) {
+    res.status(401).json({ message: "Authentification requise." });
+    return;
+  }
+  const payload = adminCreateTicketSchema.parse(req.body);
+  const user = await findUserById(payload.userId);
+  if (!user) {
+    res.status(404).json({ message: "Utilisateur introuvable." });
+    return;
+  }
+  const priority = getPriorityForCategory(payload.category);
+  if (priority === null) {
+    res.status(400).json({ message: "Catégorie invalide." });
+    return;
+  }
+  const config = getCategoryConfig(payload.category);
+  if (payload.subcategory && config && !config.subcategories.includes(payload.subcategory)) {
+    res.status(400).json({ message: "Sous-catégorie invalide." });
+    return;
+  }
+
+  if (payload.serverId) {
+    const ownerId = await getServerOwner(payload.serverId);
+    if (!ownerId || ownerId !== payload.userId) {
+      res.status(403).json({ message: "Serveur non associé à l'utilisateur." });
+      return;
+    }
+  }
+  if (payload.subscriptionId) {
+    const ownerId = await getSubscriptionOwner(payload.subscriptionId);
+    if (!ownerId || ownerId !== payload.userId) {
+      res.status(403).json({ message: "Abonnement non associé à l'utilisateur." });
+      return;
+    }
+  }
+
+  const attachments = payload.attachments?.map((item) => item.trim()).filter(Boolean) ?? [];
+  for (const attachment of attachments) {
+    if (!isAllowedAttachment(attachment)) {
+      res.status(400).json({ message: "Format de pièce jointe invalide." });
+      return;
+    }
+  }
+
+  const { ticket, message } = await createTicketWithAdminMessage({
+    reference: generateTicketReference(),
+    userId: payload.userId,
+    adminUserId: adminId,
+    status: "Ouvert",
+    priority,
+    category: payload.category,
+    subcategory: payload.subcategory,
+    serverId: payload.serverId,
+    subscriptionId: payload.subscriptionId,
+    serverUrl: payload.serverUrl,
+    message: payload.message,
+    attachments
+  });
+  res.status(201).json({ ticket, message });
 }
 
 export async function getAdminTicket(req: Request, res: Response): Promise<void> {

@@ -3,16 +3,17 @@ import { z } from "zod";
 import {
   listServersByPriority,
   listServersByUser,
+  deleteServer,
   getServerOwner,
   setServerHidden,
   setServerVisibility,
   updateServerAsAdmin
 } from "../repositories/serverRepository.js";
-import { addSubscription, deleteSubscription, listAllSubscriptions } from "../repositories/subscriptionRepository.js";
+import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
 import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser } from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
-import { createVerificationCode, createTwoFactorCode } from "../repositories/verificationRepository.js";
+import { createVerificationCode, createTwoFactorCode, listUserEmailEvents } from "../repositories/verificationRepository.js";
 import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
 import {
@@ -136,6 +137,10 @@ const adminUserParamsSchema = z.object({
   userId: z.string().uuid()
 });
 
+const adminServerParamsSchema = z.object({
+  serverId: z.string().uuid()
+});
+
 export async function getAdminUsers(_req: Request, res: Response): Promise<void> {
   const [users, availableBadges] = await Promise.all([listUsers(), listAvailableBadges()]);
   const usersWithReference = users.map((user) => ({
@@ -158,10 +163,12 @@ export async function getAdminSubscriptions(_req: Request, res: Response): Promi
 
 export async function getAdminUserDetails(req: Request, res: Response): Promise<void> {
   const params = adminUserParamsSchema.parse(req.params);
-  const [users, servers, availableBadges] = await Promise.all([
+  const [users, servers, availableBadges, subscriptions, emailEvents] = await Promise.all([
     listUsers(),
     listServersByUser(params.userId),
-    listAvailableBadges()
+    listAvailableBadges(),
+    listUserSubscriptions(params.userId),
+    listUserEmailEvents(params.userId)
   ]);
   const user = users.find((entry) => entry.id === params.userId);
   if (!user) {
@@ -174,7 +181,9 @@ export async function getAdminUserDetails(req: Request, res: Response): Promise<
       customer_reference: generateCustomerReference(user.pseudo, user.id)
     },
     servers,
-    availableBadges
+    availableBadges,
+    subscriptions,
+    emailEvents
   });
 }
 
@@ -298,6 +307,17 @@ export async function updateAdminServer(req: Request, res: Response): Promise<vo
     verified: payload.verified
   });
   res.json({ message: "Serveur mis à jour." });
+}
+
+export async function removeAdminServer(req: Request, res: Response): Promise<void> {
+  const params = adminServerParamsSchema.parse(req.params);
+  const ownerId = await getServerOwner(params.serverId);
+  if (!ownerId) {
+    res.status(404).json({ message: "Serveur introuvable." });
+    return;
+  }
+  await deleteServer(params.serverId);
+  res.status(204).send();
 }
 
 export async function removeAdminSubscription(req: Request, res: Response): Promise<void> {
