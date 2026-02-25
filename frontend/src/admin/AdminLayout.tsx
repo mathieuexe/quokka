@@ -6,25 +6,31 @@ export function AdminLayout(): JSX.Element {
 
   return (
     <section className="admin-shell">
-      <header className="admin-header">
+      <aside className="admin-sidebar">
         <div className="admin-brand">
           <p className="admin-brand-kicker">QUOKKA</p>
           <h1>Admin</h1>
           <p>Gestion claire et rapide</p>
         </div>
 
-        <nav className="admin-nav admin-nav-horizontal">
-          <NavLink to="/admin/users">Utilisateurs</NavLink>
-          <NavLink to="/admin/servers">Serveurs</NavLink>
-          <NavLink to="/admin/subscriptions">Abonnements</NavLink>
-          <NavLink to="/admin/tickets">Tickets</NavLink>
-          <NavLink to="/admin/warnings">Avertissements</NavLink>
-          <NavLink to="/admin/manual-activation">Activation manuelle</NavLink>
-          <NavLink to="/admin/promo-codes">Codes promo</NavLink>
-          <NavLink to="/admin/settings">Paramétrage</NavLink>
+        <nav className="admin-nav">
+          <div className="admin-nav-section">
+            <span className="admin-nav-title">Gestion</span>
+            <NavLink to="/admin/users">Utilisateurs</NavLink>
+            <NavLink to="/admin/servers">Serveurs</NavLink>
+            <NavLink to="/admin/subscriptions">Abonnements</NavLink>
+            <NavLink to="/admin/tickets">Tickets</NavLink>
+          </div>
+          <div className="admin-nav-section">
+            <span className="admin-nav-title">Outils</span>
+            <NavLink to="/admin/warnings">Avertissements</NavLink>
+            <NavLink to="/admin/manual-activation">Activation manuelle</NavLink>
+            <NavLink to="/admin/promo-codes">Codes promo</NavLink>
+            <NavLink to="/admin/settings">Paramétrage</NavLink>
+          </div>
         </nav>
 
-        <div className="admin-user-bar">
+        <div className="admin-sidebar-footer">
           <p>
             Connecté : <strong>{user?.pseudo}</strong>
           </p>
@@ -37,7 +43,7 @@ export function AdminLayout(): JSX.Element {
             </button>
           </div>
         </div>
-      </header>
+      </aside>
 
       <div className="admin-content">
         <Outlet />
