@@ -19,6 +19,13 @@ export type EmailTemplate = {
   text: string;
 };
 
+export type HtmlEmailTemplate = {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+};
+
 export async function sendEmail(template: EmailTemplate): Promise<void> {
   try {
     console.log(`Attempting to send email to: ${template.to}`);
@@ -59,6 +66,40 @@ export async function sendEmail(template: EmailTemplate): Promise<void> {
   } catch (error: any) {
     console.error("Erreur lors de l'envoi de l'email:", error.message || error);
     throw new Error(`Impossible d'envoyer l'email: ${error.message || 'Erreur inconnue'}`);
+  }
+}
+
+export async function sendHtmlEmail(template: HtmlEmailTemplate): Promise<void> {
+  try {
+    console.log(`Attempting to send HTML email to: ${template.to}`);
+    console.log(`Subject: ${template.subject}`);
+    
+    const payload = {
+      from: "Quokka <noreply@quokka.gg>",
+      to: template.to,
+      subject: template.subject,
+      html: template.html,
+      text: template.text ?? ""
+    };
+    
+    try {
+      const result = await getResendClient().emails.send(payload);
+      console.log(`HTML email sent successfully with quokka.gg domain. ID: ${result.data?.id}`);
+    } catch (domainError: any) {
+      console.error(`Error with quokka.gg domain:`, domainError.message);
+      
+      if (domainError?.message?.includes('domain') || domainError?.statusCode === 403 || domainError?.status === 403) {
+        console.warn("Domain quokka.gg not verified, falling back to resend.dev");
+        const fallbackPayload = { ...payload, from: "Quokka <onboarding@resend.dev>" };
+        const fallbackResult = await getResendClient().emails.send(fallbackPayload);
+        console.log(`HTML email sent successfully with resend.dev domain. ID: ${fallbackResult.data?.id}`);
+      } else {
+        throw domainError;
+      }
+    }
+  } catch (error: any) {
+    console.error("Erreur lors de l'envoi de l'email HTML:", error.message || error);
+    throw new Error(`Impossible d'envoyer l'email HTML: ${error.message || 'Erreur inconnue'}`);
   }
 }
 
@@ -338,4 +379,53 @@ ${t.expiryNote}
 ${t.footer.replace("${year}", year.toString())}
     `.trim()
   };
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatHtmlContent(content: string): string {
+  const blocks = content.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  if (blocks.length === 0) return "";
+  return blocks
+    .map((block) => `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#1F2937;">${escapeHtml(block).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+export function generateAdminMailTemplate(subject: string, content: string): { subject: string; html: string; text: string } {
+  const year = new Date().getFullYear();
+  const baseUrl = env.FRONTEND_URL.replace(/\/$/, "");
+  const logoUrl = `${baseUrl}/images/logo/logorond.png`;
+  const htmlContent = formatHtmlContent(content);
+  const safeSubject = escapeHtml(subject);
+  const html = `
+    <div style="background:#F4F6FB;padding:32px 12px;font-family:'Segoe UI',Arial,sans-serif;">
+      <table align="center" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#FFFFFF;border-radius:18px;overflow:hidden;border:1px solid #E5E7EB;">
+        <tr>
+          <td style="padding:28px 32px 16px 32px;text-align:center;">
+            <img src="${logoUrl}" alt="Quokka" width="72" height="72" style="display:block;margin:0 auto 12px auto;border-radius:50%;" />
+            <h1 style="margin:0;font-size:24px;letter-spacing:0.02em;color:#0F172A;">Quokka</h1>
+            <p style="margin:6px 0 0 0;color:#6B7280;font-size:14px;">${safeSubject}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 32px 10px 32px;">
+            ${htmlContent}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 32px 28px 32px;text-align:center;color:#9CA3AF;font-size:12px;">
+            © ${year} Quokka - Tous droits réservés
+          </td>
+        </tr>
+      </table>
+    </div>
+  `.trim();
+  return { subject, html, text: content };
 }

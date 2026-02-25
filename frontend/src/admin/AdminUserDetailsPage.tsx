@@ -35,6 +35,7 @@ export function AdminUserDetailsPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sendingCode, setSendingCode] = useState(false);
+  const [sendingMail, setSendingMail] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formState, setFormState] = useState({
@@ -45,6 +46,10 @@ export function AdminUserDetailsPage(): JSX.Element {
     role: "user" as "user" | "admin"
   });
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
+  const [mailForm, setMailForm] = useState({
+    subject: "",
+    content: ""
+  });
 
   const loadDetails = useCallback(async (): Promise<void> => {
     if (!token || !userId) return;
@@ -142,6 +147,30 @@ export function AdminUserDetailsPage(): JSX.Element {
       setError(e instanceof Error ? e.message : "Mise à jour impossible.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function sendAdminMail(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token || !details?.user) return;
+    setSendingMail(true);
+    setError(null);
+    try {
+      await apiRequest<{ message: string }>("/admin/users/send-mail", {
+        method: "POST",
+        token,
+        body: {
+          userId: details.user.id,
+          subject: mailForm.subject.trim(),
+          content: mailForm.content.trim()
+        }
+      });
+      showToast("Email envoyé.");
+      setMailForm({ subject: "", content: "" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Envoi de l'email impossible.");
+    } finally {
+      setSendingMail(false);
     }
   }
 
@@ -305,6 +334,33 @@ export function AdminUserDetailsPage(): JSX.Element {
           </div>
           <button className="btn" type="submit" disabled={saving}>
             {saving ? "Mise à jour..." : "Enregistrer les changements"}
+          </button>
+        </form>
+      </article>
+
+      <article className="card">
+        <h3>Envoyer un email</h3>
+        <form className="form" onSubmit={sendAdminMail}>
+          {error && <p className="error-text">{error}</p>}
+          <label>
+            Sujet
+            <input
+              value={mailForm.subject}
+              onChange={(event) => setMailForm((prev) => ({ ...prev, subject: event.target.value }))}
+              required
+            />
+          </label>
+          <label>
+            Contenu
+            <textarea
+              rows={6}
+              value={mailForm.content}
+              onChange={(event) => setMailForm((prev) => ({ ...prev, content: event.target.value }))}
+              required
+            />
+          </label>
+          <button className="btn" type="submit" disabled={sendingMail}>
+            {sendingMail ? "Envoi..." : "Envoyer l'email"}
           </button>
         </form>
       </article>

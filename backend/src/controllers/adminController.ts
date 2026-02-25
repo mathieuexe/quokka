@@ -14,7 +14,14 @@ import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
 import { createVerificationCode, createTwoFactorCode, listUserEmailEvents } from "../repositories/verificationRepository.js";
-import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
+import {
+  sendEmail,
+  sendHtmlEmail,
+  generateVerificationCode,
+  generateVerificationEmailTemplate,
+  generate2FAEmailTemplate,
+  generateAdminMailTemplate
+} from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
 import {
   updateMaintenanceSettings as updateMaintenanceSettingsInDb,
@@ -91,6 +98,12 @@ const deleteSubscriptionSchema = z.object({
 const resendVerificationSchema = z.object({
   userId: z.string().uuid(),
   type: z.enum(["verification", "2fa"])
+});
+
+const sendMailSchema = z.object({
+  userId: z.string().uuid(),
+  subject: z.string().trim().min(1).max(180),
+  content: z.string().trim().min(1).max(6000)
 });
 
 const deleteUserSchema = z.object({
@@ -349,6 +362,28 @@ export async function resendVerificationCode(req: Request, res: Response): Promi
     emailTemplate.to = user.email;
     await sendEmail(emailTemplate);
     res.json({ message: "Code 2FA envoyé." });
+  }
+}
+
+export async function sendAdminMail(req: Request, res: Response): Promise<void> {
+  const payload = sendMailSchema.parse(req.body);
+  const user = await findUserById(payload.userId);
+  if (!user) {
+    res.status(404).json({ message: "Utilisateur introuvable." });
+    return;
+  }
+  try {
+    const template = generateAdminMailTemplate(payload.subject, payload.content);
+    await sendHtmlEmail({
+      to: user.email,
+      subject: template.subject,
+      html: template.html,
+      text: template.text
+    });
+    res.json({ message: "Email envoyé." });
+  } catch (error: any) {
+    console.error("Erreur envoi email admin:", error);
+    res.status(500).json({ message: "Envoi d'email impossible.", error: process.env.NODE_ENV === "development" ? error.message : undefined });
   }
 }
 

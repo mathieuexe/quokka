@@ -18,7 +18,8 @@ import {
   getMaintenanceSettings,
   updateMaintenanceSettings,
   resendVerificationCode,
-  removeAdminUser
+  removeAdminUser,
+  sendAdminMail
 } from "../controllers/adminController.js";
 import {
   getAdminTicket,
@@ -52,6 +53,7 @@ adminRoutes.post("/servers/promote", promoteServer);
 adminRoutes.patch("/servers/hide", hideServer);
 adminRoutes.patch("/servers/visible", makeServerVisible);
 adminRoutes.post("/users/resend-code", resendVerificationCode);
+adminRoutes.post("/users/send-mail", sendAdminMail);
 adminRoutes.get("/tickets", getAdminTickets);
 adminRoutes.post("/tickets", postAdminTicket);
 adminRoutes.get("/tickets/:ticketId", getAdminTicket);
