@@ -8,7 +8,8 @@
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "lint": "eslint .",
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "migrate:028": "tsx src/scripts/run-migration-028.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
