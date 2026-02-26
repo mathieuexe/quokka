@@ -81,6 +81,95 @@ export type DiscordUserRecord = {
   updated_at: string;
 };
 
+export type UserIpEvent = {
+  id: string;
+  user_id: string;
+  event_type: "register" | "login" | "chat_message";
+  ip: string;
+  provider: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  chat_message_id: string | null;
+  created_at: string;
+};
+
+let userIpSchemaReady: Promise<void> | null = null;
+
+async function ensureUserIpSchema(): Promise<void> {
+  if (!userIpSchemaReady) {
+    userIpSchemaReady = (async () => {
+      await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+      await db.query(
+        `
+          CREATE TABLE IF NOT EXISTS user_ip_events (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            event_type text NOT NULL,
+            ip text NOT NULL,
+            provider text,
+            country text,
+            region text,
+            city text,
+            chat_message_id uuid,
+            created_at timestamptz NOT NULL DEFAULT NOW(),
+            CONSTRAINT user_ip_events_event_type CHECK (event_type IN ('register', 'login', 'chat_message'))
+          )
+        `
+      );
+      await db.query("CREATE INDEX IF NOT EXISTS idx_user_ip_events_user_id ON user_ip_events(user_id)");
+      await db.query("CREATE INDEX IF NOT EXISTS idx_user_ip_events_created_at ON user_ip_events(created_at DESC)");
+    })();
+  }
+  await userIpSchemaReady;
+}
+
+export async function insertUserIpEvent(entry: {
+  userId: string;
+  eventType: UserIpEvent["event_type"];
+  ip: string | null;
+  provider?: string | null;
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+  chatMessageId?: string | null;
+}): Promise<void> {
+  if (!entry.ip) return;
+  await ensureUserIpSchema();
+  await db.query(
+    `
+      INSERT INTO user_ip_events (
+        user_id, event_type, ip, provider, country, region, city, chat_message_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `,
+    [
+      entry.userId,
+      entry.eventType,
+      entry.ip,
+      entry.provider ?? null,
+      entry.country ?? null,
+      entry.region ?? null,
+      entry.city ?? null,
+      entry.chatMessageId ?? null
+    ]
+  );
+}
+
+export async function listUserIpEvents(userId: string, limit: number = 50): Promise<UserIpEvent[]> {
+  await ensureUserIpSchema();
+  const result = await db.query<UserIpEvent>(
+    `
+      SELECT id, user_id, event_type, ip, provider, country, region, city, chat_message_id, created_at
+      FROM user_ip_events
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `,
+    [userId, limit]
+  );
+  return result.rows;
+}
+
 export async function findUserByEmail(email: string): Promise<DbUser | null> {
   const result = await db.query<DbUser>("SELECT * FROM users WHERE email = $1 LIMIT 1", [email]);
   return result.rows[0] ?? null;

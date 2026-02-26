@@ -15,8 +15,10 @@ import {
   createUserFromDiscord,
   updateDiscordUserRecord,
   updateUserAvatarIfMissing,
-  findUserByPseudo
+  findUserByPseudo,
+  insertUserIpEvent
 } from "../repositories/userRepository.js";
+import { getRequestIp, resolveIpTrace } from "../middleware/auth.js";
 import { signAccessToken } from "../utils/jwt.js";
 import {
   createVerificationCode,
@@ -30,10 +32,13 @@ import {
 } from "../repositories/verificationRepository.js";
 import {
   sendEmail,
+  sendHtmlEmail,
   generateVerificationCode,
   generateVerificationEmailTemplate,
-  generate2FAEmailTemplate
+  generate2FAEmailTemplate,
+  generateLoginAlertTemplate
 } from "../services/emailService.js";
+import { generateCustomerReference } from "../utils/references.js";
 
 
 const registerSchema = z
@@ -146,6 +151,36 @@ async function generateUniquePseudo(base: string): Promise<string> {
   return candidate;
 }
 
+async function sendLoginAlertEmail(params: {
+  user: { id: string; pseudo: string; email: string };
+  language?: string;
+  req: Request;
+  ipTrace: { ip: string | null; provider: string | null; country: string | null; region: string | null; city: string | null };
+}): Promise<void> {
+  const locationParts = [params.ipTrace.city, params.ipTrace.country].filter(Boolean);
+  const location = locationParts.length > 0 ? locationParts.join(", ") : "Localisation inconnue";
+  const userAgent = typeof params.req.headers["user-agent"] === "string" ? params.req.headers["user-agent"] : "Navigateur inconnu";
+  const ip = params.ipTrace.ip ?? "IP inconnue";
+  const provider = params.ipTrace.provider ?? "Fournisseur inconnu";
+  const customerReference = generateCustomerReference(params.user.pseudo, params.user.id);
+  const loginAt = new Date().toLocaleString("fr-FR");
+  const template = generateLoginAlertTemplate({
+    pseudo: params.user.pseudo,
+    customerReference,
+    loginAt,
+    location,
+    ip,
+    userAgent,
+    provider
+  });
+  await sendHtmlEmail({
+    to: params.user.email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text
+  });
+}
+
 export async function register(req: Request, res: Response): Promise<void> {
   const payload = registerSchema.parse(req.body);
   const existing = await findUserByEmail(payload.email);
@@ -161,6 +196,19 @@ export async function register(req: Request, res: Response): Promise<void> {
     passwordHash,
     language: payload.language
   });
+
+  try {
+    const ipTrace = await resolveIpTrace(getRequestIp(req));
+    await insertUserIpEvent({
+      userId: user.id,
+      eventType: "register",
+      ip: ipTrace.ip,
+      provider: ipTrace.provider,
+      country: ipTrace.country,
+      region: ipTrace.region,
+      city: ipTrace.city
+    });
+  } catch {}
 
   try {
     const isAmongFirst100 = await isUserAmongFirst100(user.id);
@@ -237,6 +285,19 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
   } else {
     await updateLastLogin(user.id);
+    try {
+      const ipTrace = await resolveIpTrace(getRequestIp(req));
+      await insertUserIpEvent({
+        userId: user.id,
+        eventType: "login",
+        ip: ipTrace.ip,
+        provider: ipTrace.provider,
+        country: ipTrace.country,
+        region: ipTrace.region,
+        city: ipTrace.city
+      });
+      await sendLoginAlertEmail({ user, req, ipTrace });
+    } catch {}
 
     const token = signAccessToken({
       sub: user.id,
@@ -316,6 +377,19 @@ export async function verify2FA(req: Request, res: Response): Promise<void> {
   }
 
   await updateLastLogin(user.id);
+  try {
+    const ipTrace = await resolveIpTrace(getRequestIp(req));
+    await insertUserIpEvent({
+      userId: user.id,
+      eventType: "login",
+      ip: ipTrace.ip,
+      provider: ipTrace.provider,
+      country: ipTrace.country,
+      region: ipTrace.region,
+      city: ipTrace.city
+    });
+    await sendLoginAlertEmail({ user, req, ipTrace, language: user.language });
+  } catch {}
 
   const token = signAccessToken({
     sub: user.id,
@@ -486,6 +560,19 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
   }
 
   await updateLastLogin(user.id);
+  try {
+    const ipTrace = await resolveIpTrace(getRequestIp(req));
+    await insertUserIpEvent({
+      userId: user.id,
+      eventType: "login",
+      ip: ipTrace.ip,
+      provider: ipTrace.provider,
+      country: ipTrace.country,
+      region: ipTrace.region,
+      city: ipTrace.city
+    });
+    await sendLoginAlertEmail({ user, req, ipTrace, language: user.language });
+  } catch {}
 
   const token = signAccessToken({
     sub: user.id,

@@ -188,10 +188,6 @@ export default function App(): JSX.Element {
   const location = useLocation();
   const { isAuthenticated, user } = useAuth();
   const isAdminArea = location.pathname.startsWith("/admin");
-  const betaVersion = "v1.2";
-  const betaMessageLine1 = `Quokka est en phase de bêta ouverte ${betaVersion}. Certaines fonctionnalités peuvent être instables.`;
-  const betaMessageLine2 =
-    "Inscrivez-vous à la bêta publique sur notre serveur Stoat afin de nous faire part de vos retours et améliorer la plateforme.";
 
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
@@ -287,19 +283,6 @@ export default function App(): JSX.Element {
   return (
     <div className={`app-shell ${isAdminArea ? "app-shell-admin" : ""}`}>
       {showMaintenanceBanner && <MaintenanceBanner />}
-      {!isAdminArea && (
-        <div className="site-header-announcement" role="status" aria-live="polite">
-          <div className="site-header-announcement-track">
-            <span className="site-header-announcement-message">
-              <span>{betaMessageLine1}</span>
-              <span>{betaMessageLine2}</span>
-            </span>
-            <a className="site-header-announcement-btn" href="https://stt.gg/PdFsKC2w" target="_blank" rel="noreferrer">
-              Rejoindre Stoat
-            </a>
-          </div>
-        </div>
-      )}
       {!isAdminArea && <EmailVerificationBanner />}
       {!isAdminArea && <Header variant="home" />}
       <main className={isAdminArea ? "main-content admin-main-content" : "main-content"}>

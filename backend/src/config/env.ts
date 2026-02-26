@@ -21,6 +21,7 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string().optional().default(""),
   DISCORD_REDIRECT_URI: z.string().optional().default(""),
   DISCORD_SESSION_SECRET: z.string().optional().default(""),
+  IPINFO_TOKEN: z.string().optional().default("")
 });
 
 export const env = envSchema.parse(process.env);

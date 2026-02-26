@@ -24,6 +24,17 @@ type UserDetailsResponse = {
     expires_at: string;
     used: boolean;
   }>;
+  ipEvents: Array<{
+    id: string;
+    event_type: "register" | "login" | "chat_message";
+    ip: string;
+    provider: string | null;
+    country: string | null;
+    region: string | null;
+    city: string | null;
+    chat_message_id: string | null;
+    created_at: string;
+  }>;
 };
 
 export function AdminUserDetailsPage(): JSX.Element {
@@ -436,6 +447,41 @@ export function AdminUserDetailsPage(): JSX.Element {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </article>
+
+      <article className="card">
+        <h3>Historique des IP</h3>
+        {details.ipEvents.length === 0 ? (
+          <p>Aucune IP enregistrée.</p>
+        ) : (
+          <div className="admin-list-grid">
+            {details.ipEvents.map((event) => {
+              const locationParts = [event.city, event.region, event.country].filter(Boolean);
+              const locationLabel = locationParts.length > 0 ? locationParts.join(", ") : "Localisation inconnue";
+              const providerLabel = event.provider ?? "Fournisseur inconnu";
+              const eventLabel =
+                event.event_type === "register"
+                  ? "Inscription"
+                  : event.event_type === "login"
+                    ? "Connexion"
+                    : "Message tchat";
+              return (
+                <div key={event.id} className="admin-list-item static">
+                  <div>
+                    <h3>{eventLabel}</h3>
+                    <p>IP : {event.ip}</p>
+                    <p>{locationLabel}</p>
+                  </div>
+                  <div className="admin-list-item-meta">
+                    <span className="tag">{providerLabel}</span>
+                    <span className="tag">{new Date(event.created_at).toLocaleString("fr-FR")}</span>
+                    {event.chat_message_id && <span className="tag">Message : {event.chat_message_id}</span>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </article>

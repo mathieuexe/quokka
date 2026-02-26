@@ -18,6 +18,8 @@ import {
   upsertChatPresence
 } from "../repositories/chatRepository.js";
 import { isUserBanned, isUserMuted } from "../repositories/chatModerationRepository.js";
+import { insertUserIpEvent } from "../repositories/userRepository.js";
+import { getRequestIp, resolveIpTrace } from "../middleware/auth.js";
 
 const listSchema = z.object({
   after: z.string().optional(),
@@ -150,6 +152,19 @@ export async function postChatMessage(req: Request, res: Response): Promise<void
     res.status(429).json({ message: "Anti-spam : veuillez attendre 5 secondes entre deux messages." });
     return;
   }
+  try {
+    const ipTrace = await resolveIpTrace(getRequestIp(req));
+    await insertUserIpEvent({
+      userId,
+      eventType: "chat_message",
+      ip: ipTrace.ip,
+      provider: ipTrace.provider,
+      country: ipTrace.country,
+      region: ipTrace.region,
+      city: ipTrace.city,
+      chatMessageId: message.id
+    });
+  } catch {}
   res.status(201).json({ message });
 }
 

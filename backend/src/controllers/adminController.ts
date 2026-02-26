@@ -10,7 +10,7 @@ import {
   updateServerAsAdmin
 } from "../repositories/serverRepository.js";
 import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
-import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser } from "../repositories/userRepository.js";
+import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser, listUserIpEvents } from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
 import { createVerificationCode, createTwoFactorCode, listUserEmailEvents } from "../repositories/verificationRepository.js";
@@ -176,12 +176,13 @@ export async function getAdminSubscriptions(_req: Request, res: Response): Promi
 
 export async function getAdminUserDetails(req: Request, res: Response): Promise<void> {
   const params = adminUserParamsSchema.parse(req.params);
-  const [users, servers, availableBadges, subscriptions, emailEvents] = await Promise.all([
+  const [users, servers, availableBadges, subscriptions, emailEvents, ipEvents] = await Promise.all([
     listUsers(),
     listServersByUser(params.userId),
     listAvailableBadges(),
     listUserSubscriptions(params.userId),
-    listUserEmailEvents(params.userId)
+    listUserEmailEvents(params.userId),
+    listUserIpEvents(params.userId, 200)
   ]);
   const user = users.find((entry) => entry.id === params.userId);
   if (!user) {
@@ -196,7 +197,8 @@ export async function getAdminUserDetails(req: Request, res: Response): Promise<
     servers,
     availableBadges,
     subscriptions,
-    emailEvents
+    emailEvents,
+    ipEvents
   });
 }
 
