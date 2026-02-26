@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
 
@@ -159,6 +159,19 @@ export function AdminTicketsPage(): JSX.Element {
   const [editCategory, setEditCategory] = useState("");
   const [editSubcategory, setEditSubcategory] = useState("");
   const [editAssignedAdmin, setEditAssignedAdmin] = useState<string>("");
+  const [previewUserOpen, setPreviewUserOpen] = useState(false);
+  const [previewUserLoading, setPreviewUserLoading] = useState(false);
+  const [previewUserError, setPreviewUserError] = useState<string | null>(null);
+  const [previewUser, setPreviewUser] = useState<{
+    id: string;
+    pseudo: string;
+    email: string;
+    role: "user" | "admin";
+    email_verified: boolean;
+    two_factor_enabled: boolean;
+    created_at: string;
+    language?: string;
+  } | null>(null);
   const [createUserId, setCreateUserId] = useState("");
   const [createCategory, setCreateCategory] = useState(CATEGORY_CONFIG[0]?.label ?? "");
   const [createSubcategory, setCreateSubcategory] = useState(CATEGORY_CONFIG[0]?.subcategories[0] ?? "");
@@ -257,6 +270,33 @@ export function AdminTicketsPage(): JSX.Element {
       setDetailError(e instanceof Error ? e.message : "Chargement du ticket impossible.");
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function openUserPreview(userId: string): Promise<void> {
+    if (!token) return;
+    setPreviewUserLoading(true);
+    setPreviewUserError(null);
+    setPreviewUserOpen(true);
+    try {
+      const data = await apiRequest<{
+        user: {
+          id: string;
+          pseudo: string;
+          email: string;
+          role: "user" | "admin";
+          email_verified: boolean;
+          two_factor_enabled: boolean;
+          created_at: string;
+          language?: string;
+        };
+      }>(`/admin/users/${userId}`, { token });
+      setPreviewUser(data.user);
+    } catch (e) {
+      setPreviewUserError(e instanceof Error ? e.message : "Impossible de charger cet utilisateur.");
+      setPreviewUser(null);
+    } finally {
+      setPreviewUserLoading(false);
     }
   }
 
@@ -561,6 +601,16 @@ export function AdminTicketsPage(): JSX.Element {
                   <p>{selectedTicket.category}{selectedTicket.subcategory ? ` · ${selectedTicket.subcategory}` : ""}</p>
                   {selectedTicket.server_name && <p>Serveur : {selectedTicket.server_name}</p>}
                   {selectedTicket.server_url && <p>URL : {selectedTicket.server_url}</p>}
+                  <p>
+                    Utilisateur :{" "}
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => void openUserPreview(selectedTicket.user_id)}
+                    >
+                      {selectedTicket.user_pseudo}
+                    </button>
+                  </p>
                   <p>Ouvert le {new Date(selectedTicket.created_at).toLocaleString("fr-FR")}</p>
                 </div>
                 <div className="tickets-detail-meta">
@@ -683,6 +733,67 @@ export function AdminTicketsPage(): JSX.Element {
           )}
         </article>
       </div>
+
+      {previewUserOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.32)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50
+          }}
+          onClick={() => setPreviewUserOpen(false)}
+        >
+          <div
+            className="card"
+            style={{ width: "min(92vw, 560px)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h3 style={{ margin: 0 }}>Aperçu utilisateur</h3>
+              <button className="btn btn-ghost" type="button" onClick={() => setPreviewUserOpen(false)}>
+                Fermer
+              </button>
+            </div>
+            {previewUserLoading ? (
+              <p>Chargement...</p>
+            ) : previewUserError ? (
+              <p className="error-text">{previewUserError}</p>
+            ) : previewUser ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div className="admin-user-meta">
+                  <span className="tag">ID: {previewUser.id}</span>
+                  <span className="tag">{(previewUser.language ?? "fr").toUpperCase()}</span>
+                </div>
+                <p style={{ margin: 0 }}>
+                  <strong>{previewUser.pseudo}</strong>
+                </p>
+                <p style={{ margin: 0 }}>{previewUser.email}</p>
+                <div className="admin-user-meta">
+                  <span className="tag">Rôle: {previewUser.role}</span>
+                  <span className={`status-pill ${previewUser.email_verified ? "status-paid" : "status-failed"}`}>
+                    {previewUser.email_verified ? "Email vérifié" : "Email non vérifié"}
+                  </span>
+                  <span className={`status-pill ${previewUser.two_factor_enabled ? "status-paid" : "status-pending"}`}>
+                    {previewUser.two_factor_enabled ? "2FA activée" : "2FA désactivée"}
+                  </span>
+                </div>
+                <p style={{ margin: 0, color: "var(--muted)" }}>
+                  Créé le {new Date(previewUser.created_at).toLocaleString("fr-FR")}
+                </p>
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+                  <Link className="btn" to={`/admin/users/${previewUser.id}`}>Ouvrir la fiche</Link>
+                </div>
+              </div>
+            ) : (
+              <p>Aucune donnée.</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

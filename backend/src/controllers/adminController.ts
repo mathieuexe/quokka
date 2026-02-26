@@ -13,7 +13,13 @@ import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubs
 import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser, listUserIpEvents } from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
-import { createVerificationCode, createTwoFactorCode, listUserEmailEvents } from "../repositories/verificationRepository.js";
+import {
+  createVerificationCode,
+  createTwoFactorCode,
+  listUserEmailEvents,
+  toggleTwoFactor,
+  deleteTwoFactorCodesForUser
+} from "../repositories/verificationRepository.js";
 import {
   sendEmail,
   sendHtmlEmail,
@@ -441,4 +447,11 @@ export async function updateMaintenanceSettings(req: Request, res: Response): Pr
     allowed_ips: payload.allowed_ips ?? ""
   });
   res.json({ message: "Paramètres de maintenance mis à jour." });
+}
+
+export async function disableUserTwoFactor(req: Request, res: Response): Promise<void> {
+  const params = adminUserParamsSchema.parse(req.params);
+  await toggleTwoFactor(params.userId, false);
+  await deleteTwoFactorCodesForUser(params.userId);
+  res.json({ message: "Double authentification désactivée pour l'utilisateur.", two_factor_enabled: false });
 }

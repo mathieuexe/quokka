@@ -270,6 +270,26 @@ export function AdminUserDetailsPage(): JSX.Element {
             <button className="btn btn-ghost" type="button" disabled={sendingCode} onClick={() => void resendCode("2fa")}>
               {sendingCode ? "Envoi..." : "Envoyer un code 2FA"}
             </button>
+            {target.two_factor_enabled && (
+              <button
+                className="btn btn-danger"
+                type="button"
+                onClick={async () => {
+                  if (!token) return;
+                  const confirmed = window.confirm("Confirmer la désactivation de la double authentification (2FA) pour cet utilisateur ?");
+                  if (!confirmed) return;
+                  try {
+                    await apiRequest(`/admin/users/${target.id}/disable-2fa`, { method: "POST", token });
+                    showToast("2FA désactivée pour cet utilisateur.");
+                    await loadDetails();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Désactivation 2FA impossible.");
+                  }
+                }}
+              >
+                Désactiver la 2FA
+              </button>
+            )}
             {target.id !== authUser?.id && (
               <button className="btn btn-danger" type="button" disabled={deleting} onClick={() => void deleteUser()}>
                 {deleting ? "Suppression..." : "Supprimer l'utilisateur"}

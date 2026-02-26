@@ -30,7 +30,7 @@ import {
   postAdminTicketMessage
 } from "../controllers/ticketController.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
-import { getAdminNotifications, markAdminNotificationsRead } from "../controllers/adminController.js";
+import { getAdminNotifications, markAdminNotificationsRead, disableUserTwoFactor } from "../controllers/adminController.js";
 
 export const adminRoutes = Router();
 
@@ -39,6 +39,7 @@ adminRoutes.get("/maintenance", getMaintenanceSettings);
 adminRoutes.put("/maintenance", updateMaintenanceSettings);
 adminRoutes.get("/users", getAdminUsers);
 adminRoutes.get("/users/:userId", getAdminUserDetails);
+adminRoutes.post("/users/:userId/disable-2fa", disableUserTwoFactor);
 adminRoutes.get("/servers", getAdminServers);
 adminRoutes.get("/promo-codes", getAdminPromoCodes);
 adminRoutes.get("/subscriptions", getAdminSubscriptions);
