@@ -4,6 +4,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { getServerOwner } from "../repositories/serverRepository.js";
 import {
+  createBalancePayment,
   createGiftedStripePayment,
   createPendingStripePayment,
   getUserStripePaymentById,
@@ -15,7 +16,7 @@ import {
 } from "../repositories/paymentRepository.js";
 import { findPromoCodeByCode, incrementPromoCodeUses } from "../repositories/promoCodeRepository.js";
 import { createSubscriptionRange } from "../repositories/subscriptionRepository.js";
-import { findUserById } from "../repositories/userRepository.js";
+import { debitUserBalanceIfEnough, findUserById } from "../repositories/userRepository.js";
 import { generateInvoicePdf } from "../utils/invoicePdf.js";
 import { generateCustomerReference } from "../utils/references.js";
 
@@ -46,7 +47,8 @@ const createCheckoutSchema = z
     hours: z.number().int().min(1).max(24).optional(),
     startDate: z.string().datetime().optional(),
     returnTo: z.enum(["dashboard", "offers"]).optional(),
-    promoCode: z.string().trim().min(1).max(64).optional()
+    promoCode: z.string().trim().min(1).max(64).optional(),
+    paymentMode: z.enum(["card", "balance"]).optional()
   })
   .superRefine((payload, ctx) => {
     if (payload.type === "essentiel" && !payload.days) {
@@ -152,6 +154,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
 
   const promo = promoValidation && promoValidation.ok ? promoValidation.promo : null;
   const amountCents = promo ? computeDiscountedAmount({ baseAmountCents, promo }) : baseAmountCents;
+  const paymentMode = payload.paymentMode ?? "card";
 
   if (amountCents === 0) {
     const startDate = payload.type === "essentiel" ? plannedStartDate ?? new Date() : new Date();
@@ -181,6 +184,45 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
       await incrementPromoCodeUses(promo.id);
     }
     res.json({ checkoutUrl: `${thankYouBaseUrl}?session_id=${encodeURIComponent(gifted.checkoutSessionId)}` });
+    return;
+  }
+
+  if (paymentMode === "balance") {
+    const startDate = payload.type === "essentiel" ? plannedStartDate ?? new Date() : new Date();
+    const endDate =
+      payload.type === "essentiel"
+        ? new Date(startDate.getTime() + (payload.days ?? 1) * 24 * 60 * 60 * 1000)
+        : new Date(startDate.getTime() + (payload.hours ?? 1) * 60 * 60 * 1000);
+
+    const balanceResult = await debitUserBalanceIfEnough(userId, amountCents);
+    if (!balanceResult.ok) {
+      res.status(400).json({ message: "Solde insuffisant." });
+      return;
+    }
+
+    const balancePayment = await createBalancePayment({
+      userId,
+      serverId: payload.serverId,
+      subscriptionType: payload.type,
+      plannedStartDate: startDate,
+      durationDays: payload.days ?? null,
+      durationHours: payload.hours ?? null,
+      promotionStartDate: startDate,
+      promotionEndDate: endDate,
+      amountCents
+    });
+    await createSubscriptionRange({ serverId: payload.serverId, type: payload.type, startDate, endDate });
+    await upsertStripePaymentPromoMeta({
+      checkoutSessionId: balancePayment.checkoutSessionId,
+      baseAmountCents,
+      promoCode: promo ? promo.code : null,
+      promoDiscountType: promo ? promo.discount_type : null,
+      promoDiscountValue: promo ? promo.discount_value : null
+    });
+    if (promo) {
+      await incrementPromoCodeUses(promo.id);
+    }
+    res.json({ checkoutUrl: `${thankYouBaseUrl}?session_id=${encodeURIComponent(balancePayment.checkoutSessionId)}` });
     return;
   }
 

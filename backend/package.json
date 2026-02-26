@@ -9,7 +9,9 @@
     "start": "node dist/server.js",
     "lint": "eslint .",
     "check": "tsc --noEmit -p tsconfig.json",
-    "migrate:028": "tsx src/scripts/run-migration-028.ts"
+    "migrate:028": "tsx src/scripts/run-migration-028.ts",
+    "migrate:029": "tsx src/scripts/run-migration-029.ts",
+    "migrate:030": "tsx src/scripts/run-migration-030.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

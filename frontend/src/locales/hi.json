@@ -76,7 +76,8 @@
     "avatarAlt": "{{pseudo}} का अवतार"
   },
   "footer": {
-    "copyright": "Copyright © {{year}} Quokka. All rights reserved."
+    "copyright": "Copyright © {{year}} Quokka. All rights reserved.",
+    "blog": "ब्लॉग"
   },
   "maintenance": {
     "message": "Quokka इस समय मेंटेनेंस में है। असुविधा के लिए क्षमा करें।",
@@ -125,6 +126,12 @@
     "summaryDiscount": "छूट",
     "summaryTotal": "कुल",
     "summarySubtotal": "उप-योग {{amount}}",
+    "paymentMode": "भुगतान विधि",
+    "paymentModeCard": "कार्ड",
+    "paymentModeBalance": "बैलेंस",
+    "balanceLabel": "उपलब्ध बैलेंस",
+    "balanceInsufficient": "इस भुगतान के लिए बैलेंस पर्याप्त नहीं है।",
+    "payWithBalanceButton": "बैलेंस से भुगतान करें",
     "payButton": "भुगतान करें और प्रमोशन शुरू करें",
     "viewOrders": "मेरे ऑर्डर देखें"
   },

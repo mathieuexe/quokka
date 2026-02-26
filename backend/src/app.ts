@@ -14,6 +14,7 @@ import { systemRoutes } from "./routes/systemRoutes.js";
 import { userRoutes } from "./routes/userRoutes.js";
 import { chatRoutes } from "./routes/chatRoutes.js";
 import { ticketRoutes } from "./routes/ticketRoutes.js";
+import { blogRoutes } from "./routes/blogRoutes.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { maintenanceGuard } from "./middleware/maintenance.js";
 
@@ -51,6 +52,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/blog", blogRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

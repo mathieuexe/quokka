@@ -19,7 +19,7 @@ export const chatRoutes = Router();
 chatRoutes.get("/messages", getChatMessages);
 chatRoutes.post("/messages", optionalAuth, postChatMessage);
 chatRoutes.delete("/messages/:messageId", requireAuth, requireAdmin, deleteChatMessage);
-chatRoutes.post("/presence", requireAuth, postChatPresence);
+chatRoutes.post("/presence", optionalAuth, postChatPresence);
 chatRoutes.delete("/presence", requireAuth, deleteChatPresenceHandler);
 chatRoutes.get("/online", getChatOnlineUsers);
 chatRoutes.get("/online/guests", getChatOnlineGuests);

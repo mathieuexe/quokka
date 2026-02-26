@@ -42,6 +42,8 @@ export type AdminUserRecord = {
   email_verified: boolean;
   two_factor_enabled: boolean;
   language: string;
+  balance_cents: number;
+  last_balance_update: string | null;
 };
 
 export type DbUser = {
@@ -66,6 +68,8 @@ export type DbUser = {
   two_factor_enabled: boolean;
   created_at: string;
   language: string;
+  balance_cents: number;
+  last_balance_update: string | null;
 };
 
 export type DiscordUserRecord = {
@@ -401,6 +405,8 @@ export async function listUsers(): Promise<AdminUserRecord[]> {
         u.email_verified,
         u.two_factor_enabled,
         u.language,
+        u.balance_cents,
+        u.last_balance_update,
         COALESCE(
           json_agg(
             json_build_object(
@@ -454,6 +460,60 @@ export async function updateUserAsAdmin(
     `,
     [userId, input.pseudo, input.email, input.bio, input.internalNote, input.role]
   );
+}
+
+export async function creditUserBalance(userId: string, amountCents: number): Promise<number> {
+  const result = await db.query<{ balance_cents: number }>(
+    `
+      UPDATE users
+      SET balance_cents = balance_cents + $2,
+          last_balance_update = NOW(),
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING balance_cents
+    `,
+    [userId, amountCents]
+  );
+  return result.rows[0]?.balance_cents ?? 0;
+}
+
+export async function debitUserBalanceIfEnough(userId: string, amountCents: number): Promise<{ ok: boolean; balance: number }> {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query<{ balance_cents: number }>(
+      `
+        SELECT balance_cents
+        FROM users
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [userId]
+    );
+    const balance = result.rows[0]?.balance_cents ?? 0;
+    if (balance < amountCents) {
+      await client.query("ROLLBACK");
+      return { ok: false, balance };
+    }
+    const updated = await client.query<{ balance_cents: number }>(
+      `
+        UPDATE users
+        SET balance_cents = balance_cents - $2,
+            last_balance_update = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING balance_cents
+      `,
+      [userId, amountCents]
+    );
+    await client.query("COMMIT");
+    return { ok: true, balance: updated.rows[0]?.balance_cents ?? balance - amountCents };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listAvailableBadges(): Promise<UserBadge[]> {

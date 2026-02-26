@@ -78,6 +78,8 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
       kick_url: user.kick_url,
       snapchat_url: user.snapchat_url,
       tiktok_url: user.tiktok_url,
+      balance_cents: user.balance_cents,
+      last_balance_update: user.last_balance_update,
       badges,
       role: user.role
     },

@@ -76,7 +76,8 @@
     "avatarAlt": "Avatar von {{pseudo}}"
   },
   "footer": {
-    "copyright": "Copyright © {{year}} Quokka. Alle Rechte vorbehalten."
+    "copyright": "Copyright © {{year}} Quokka. Alle Rechte vorbehalten.",
+    "blog": "Blog"
   },
   "maintenance": {
     "message": "Quokka wird derzeit gewartet. Wir entschuldigen uns für die Unannehmlichkeiten.",
@@ -125,6 +126,12 @@
     "summaryDiscount": "Rabatt",
     "summaryTotal": "Gesamt",
     "summarySubtotal": "Zwischensumme {{amount}}",
+    "paymentMode": "Zahlungsart",
+    "paymentModeCard": "Karte",
+    "paymentModeBalance": "Guthaben",
+    "balanceLabel": "Verfügbares Guthaben",
+    "balanceInsufficient": "Nicht genügend Guthaben für diese Zahlung.",
+    "payWithBalanceButton": "Mit Guthaben zahlen",
     "payButton": "Bezahlen und Promotion starten",
     "viewOrders": "Meine Bestellungen"
   },

@@ -56,6 +56,7 @@ export function OffersPage(): JSX.Element {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoApplying, setPromoApplying] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [selectedServerId, setSelectedServerId] = useState<string>("");
   const [offerType, setOfferType] = useState<OfferType>("essentiel");
@@ -64,6 +65,7 @@ export function OffersPage(): JSX.Element {
   const [startDate, setStartDate] = useState<string>(() => toDateInputValue(new Date()));
   const [promoCodeInput, setPromoCodeInput] = useState<string>("");
   const [appliedPromo, setAppliedPromo] = useState<PromoPreviewResponse | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"card" | "balance">("card");
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -87,6 +89,7 @@ export function OffersPage(): JSX.Element {
       try {
         const data = await apiRequest<DashboardResponse>("/dashboard", { token });
         setServers(data.servers);
+        setCurrentUser(data.user);
         setSelectedServerId((current) => current || data.servers[0]?.id || "");
       } catch (e) {
         setError(e instanceof Error ? e.message : t("offers.loadServersError"));
@@ -102,6 +105,8 @@ export function OffersPage(): JSX.Element {
   const totalAmountCents = useMemo(() => appliedPromo?.final_amount_cents ?? baseAmountCents, [appliedPromo, baseAmountCents]);
   const baseAmountLabel = useMemo(() => `${(baseAmountCents / 100).toFixed(2)} EUR`, [baseAmountCents]);
   const totalAmountLabel = useMemo(() => `${(totalAmountCents / 100).toFixed(2)} EUR`, [totalAmountCents]);
+  const balanceCents = useMemo(() => currentUser?.balance_cents ?? 0, [currentUser]);
+  const canPayWithBalance = useMemo(() => balanceCents >= totalAmountCents, [balanceCents, totalAmountCents]);
 
   useEffect(() => {
     setAppliedPromo(null);
@@ -164,6 +169,10 @@ export function OffersPage(): JSX.Element {
       setCheckoutError(t("offers.checkoutSelectServer"));
       return;
     }
+    if (paymentMode === "balance" && !canPayWithBalance) {
+      setCheckoutError(t("offers.balanceInsufficient"));
+      return;
+    }
     setCheckoutError(null);
     setSuccessMessage(null);
     try {
@@ -176,14 +185,16 @@ export function OffersPage(): JSX.Element {
               days: clamp(days, 1, 30),
               startDate: new Date(`${startDate}T00:00:00`).toISOString(),
               returnTo: "offers" as const,
-              promoCode
+              promoCode,
+              paymentMode
             }
           : {
               serverId: selectedServerId,
               type: offerType,
               hours: clamp(hours, 1, 24),
               returnTo: "offers" as const,
-              promoCode
+              promoCode,
+              paymentMode
             };
 
       const response = await apiRequest<{ checkoutUrl: string }>("/payments/checkout-session", {
@@ -386,8 +397,45 @@ export function OffersPage(): JSX.Element {
             {appliedPromo && appliedPromo.final_amount_cents !== appliedPromo.base_amount_cents && (
               <p className="offers-summary-note">{t("offers.summarySubtotal", { amount: baseAmountLabel })}</p>
             )}
-            <button className="btn offers-pay-btn" type="button" onClick={() => void startCheckout()} disabled={!selectedServerId}>
-              {t("offers.payButton")}
+            <div className="offers-summary-row">
+              <span>{t("offers.paymentMode")}</span>
+              <div className="offers-payment-options">
+                <label className="offers-payment-option">
+                  <input
+                    type="radio"
+                    name="paymentMode"
+                    value="card"
+                    checked={paymentMode === "card"}
+                    onChange={() => setPaymentMode("card")}
+                  />
+                  <span>{t("offers.paymentModeCard")}</span>
+                </label>
+                <label className="offers-payment-option">
+                  <input
+                    type="radio"
+                    name="paymentMode"
+                    value="balance"
+                    checked={paymentMode === "balance"}
+                    onChange={() => setPaymentMode("balance")}
+                  />
+                  <span>{t("offers.paymentModeBalance")}</span>
+                </label>
+              </div>
+            </div>
+            <div className="offers-summary-row">
+              <span>{t("offers.balanceLabel")}</span>
+              <strong>{(balanceCents / 100).toFixed(2)} EUR</strong>
+            </div>
+            {paymentMode === "balance" && !canPayWithBalance && (
+              <p className="error-text">{t("offers.balanceInsufficient")}</p>
+            )}
+            <button
+              className="btn offers-pay-btn"
+              type="button"
+              onClick={() => void startCheckout()}
+              disabled={!selectedServerId || (paymentMode === "balance" && !canPayWithBalance)}
+            >
+              {paymentMode === "balance" ? t("offers.payWithBalanceButton") : t("offers.payButton")}
             </button>
             <Link className="btn btn-ghost" to="/subscriptions">
               {t("offers.viewOrders")}

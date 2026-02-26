@@ -35,6 +35,8 @@ export function AdminPage(): JSX.Element {
   const [selectedServerId, setSelectedServerId] = useState("");
   const [maintenance, setMaintenance] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState("Le site est en maintenance.");
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditingBalance, setCreditingBalance] = useState(false);
   const [userForm, setUserForm] = useState({
     pseudo: "",
     email: "",
@@ -286,6 +288,31 @@ export function AdminPage(): JSX.Element {
     }
   }
 
+  async function onCreditBalance(): Promise<void> {
+    if (!token || !selectedUserId) return;
+    const amount = Number(creditAmount.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Montant invalide.");
+      return;
+    }
+    setCreditingBalance(true);
+    setError(null);
+    try {
+      await apiRequest<{ message: string; balance_cents: number }>(`/admin/users/${selectedUserId}/credit-balance`, {
+        method: "POST",
+        token,
+        body: { amountEuros: amount }
+      });
+      showToast("Solde crédité.");
+      setCreditAmount("");
+      await loadData();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Crédit du solde impossible.");
+    } finally {
+      setCreditingBalance(false);
+    }
+  }
+
   if (user?.role !== "admin") {
     return (
       <section className="page">
@@ -484,6 +511,39 @@ export function AdminPage(): JSX.Element {
                 <option value="admin">admin</option>
               </select>
             </label>
+            {selectedUser && (
+              <div style={{
+                padding: "0.75rem",
+                backgroundColor: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                borderRadius: "8px",
+                marginBottom: "1rem"
+              }}>
+                <p style={{
+                  margin: "0 0 0.5rem 0",
+                  fontSize: "0.875rem",
+                  color: "#111827",
+                  fontWeight: "500"
+                }}>
+                  Solde actuel : {((selectedUser.balance_cents ?? 0) / 100).toFixed(2)} €
+                </p>
+                <div className="admin-inline-grid">
+                  <label>
+                    Créditer le solde (€)
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={creditAmount}
+                      onChange={(event) => setCreditAmount(event.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="btn" onClick={() => void onCreditBalance()} disabled={creditingBalance}>
+                    {creditingBalance ? "Crédit..." : "Créditer"}
+                  </button>
+                </div>
+              </div>
+            )}
             {selectedUser && (
               <div style={{
                 padding: "0.75rem",
@@ -735,4 +795,3 @@ export function AdminPage(): JSX.Element {
     </section>
   );
 }
-

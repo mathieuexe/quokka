@@ -10,7 +10,16 @@ import {
   updateServerAsAdmin
 } from "../repositories/serverRepository.js";
 import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
-import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser, listUserIpEvents } from "../repositories/userRepository.js";
+import {
+  creditUserBalance,
+  listAvailableBadges,
+  listUsers,
+  setUserBadgesAsAdmin,
+  updateUserAsAdmin,
+  findUserById,
+  deleteUser,
+  listUserIpEvents
+} from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
 import {
@@ -196,6 +205,10 @@ const deleteSubscriptionSchema = z.object({
 const resendVerificationSchema = z.object({
   userId: z.string().uuid(),
   type: z.enum(["verification", "2fa"])
+});
+
+const creditBalanceSchema = z.object({
+  amountEuros: z.number().positive()
 });
 
 const sendMailSchema = z.object({
@@ -407,6 +420,19 @@ export async function updateAdminUser(req: Request, res: Response): Promise<void
     await setUserBadgesAsAdmin(payload.userId, payload.badgeIds);
   }
   res.json({ message: "Utilisateur mis à jour." });
+}
+
+export async function creditAdminUserBalance(req: Request, res: Response): Promise<void> {
+  const params = adminUserParamsSchema.parse(req.params);
+  const payload = creditBalanceSchema.parse(req.body);
+  const user = await findUserById(params.userId);
+  if (!user) {
+    res.status(404).json({ message: "Utilisateur introuvable." });
+    return;
+  }
+  const amountCents = Math.round(payload.amountEuros * 100);
+  const balance = await creditUserBalance(params.userId, amountCents);
+  res.json({ message: "Solde crédité.", balance_cents: balance });
 }
 
 export async function updateAdminServer(req: Request, res: Response): Promise<void> {

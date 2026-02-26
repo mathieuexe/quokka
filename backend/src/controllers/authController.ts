@@ -325,7 +325,9 @@ export async function login(req: Request, res: Response): Promise<void> {
         avatar_url: user.avatar_url,
         email_verified: user.email_verified,
         two_factor_enabled: user.two_factor_enabled,
-        role: user.role
+        role: user.role,
+        balance_cents: user.balance_cents,
+        last_balance_update: user.last_balance_update
       }
     });
   }
@@ -365,7 +367,9 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
       avatar_url: user.avatar_url,
       email_verified: true,
       two_factor_enabled: user.two_factor_enabled,
-      role: user.role
+      role: user.role,
+      balance_cents: user.balance_cents,
+      last_balance_update: user.last_balance_update
     }
   });
 }
@@ -418,7 +422,9 @@ export async function verify2FA(req: Request, res: Response): Promise<void> {
       avatar_url: user.avatar_url,
       email_verified: user.email_verified,
       two_factor_enabled: user.two_factor_enabled,
-      role: user.role
+      role: user.role,
+      balance_cents: user.balance_cents,
+      last_balance_update: user.last_balance_update
     }
   });
 }

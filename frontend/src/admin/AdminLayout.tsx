@@ -63,6 +63,7 @@ export function AdminLayout(): JSX.Element {
             </NavLink>
             <NavLink to="/admin/manual-activation">Activation manuelle</NavLink>
             <NavLink to="/admin/promo-codes">Codes promo</NavLink>
+            <NavLink to="/admin/blog">Blog</NavLink>
             <NavLink to="/admin/settings">Paramétrage</NavLink>
           </div>
         </nav>

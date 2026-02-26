@@ -15,7 +15,8 @@ import {
   listOnlineChatUsers,
   listRecentChatMessages,
   setChatMaintenanceEnabled,
-  upsertChatPresence
+  upsertChatPresence,
+  upsertGuestPresence
 } from "../repositories/chatRepository.js";
 import { isUserBanned, isUserMuted } from "../repositories/chatModerationRepository.js";
 import { insertUserIpEvent } from "../repositories/userRepository.js";
@@ -47,6 +48,14 @@ const onlineSchema = z.object({
 
 const maintenanceSchema = z.object({
   enabled: z.boolean()
+});
+
+const presenceSchema = z.object({
+  guestPseudo: z
+    .string()
+    .trim()
+    .regex(/^Guest_[A-Za-z0-9]{1,6}$/, "Pseudo invité invalide.")
+    .optional()
 });
 
 function generateGuestPseudo(): string {
@@ -170,12 +179,17 @@ export async function postChatMessage(req: Request, res: Response): Promise<void
 
 export async function postChatPresence(req: Request, res: Response): Promise<void> {
   const userId = req.user?.sub;
-  if (!userId) {
-    res.status(401).json({ message: "Authentification requise." });
+  const payload = presenceSchema.parse(req.body ?? {});
+  if (userId) {
+    await upsertChatPresence(userId);
+    res.status(204).send();
     return;
   }
-
-  await upsertChatPresence(userId);
+  if (payload.guestPseudo) {
+    await upsertGuestPresence(payload.guestPseudo);
+    res.status(204).send();
+    return;
+  }
   res.status(204).send();
 }
 

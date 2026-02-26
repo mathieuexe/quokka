@@ -494,6 +494,44 @@ export async function setStripePaymentPromotionWindow(input: {
   );
 }
 
+export async function createBalancePayment(input: {
+  userId: string;
+  serverId: string;
+  subscriptionType: "quokka_plus" | "essentiel";
+  plannedStartDate: Date;
+  durationDays: number | null;
+  durationHours: number | null;
+  promotionStartDate: Date;
+  promotionEndDate: Date;
+  amountCents: number;
+}): Promise<{ checkoutSessionId: string; paymentId: string }> {
+  const checkoutSessionId = `balance_${randomUUID()}`;
+  const result = await db.query<{ id: string }>(
+    `
+      INSERT INTO stripe_payments (
+        checkout_session_id, payment_intent_id, user_id, server_id,
+        subscription_type, planned_start_date, duration_days, duration_hours,
+        promotion_start_date, promotion_end_date, amount_cents, status
+      )
+      VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'completed')
+      RETURNING id
+    `,
+    [
+      checkoutSessionId,
+      input.userId,
+      input.serverId,
+      input.subscriptionType,
+      input.plannedStartDate.toISOString(),
+      input.durationDays,
+      input.durationHours,
+      input.promotionStartDate.toISOString(),
+      input.promotionEndDate.toISOString(),
+      input.amountCents
+    ]
+  );
+  return { checkoutSessionId, paymentId: result.rows[0]?.id ?? checkoutSessionId };
+}
+
 export async function createGiftedStripePayment(input: {
   userId: string;
   serverId: string;

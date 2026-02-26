@@ -76,7 +76,8 @@
     "avatarAlt": "Avatar de {{pseudo}}"
   },
   "footer": {
-    "copyright": "Copyright © {{year}} Quokka. Todos los derechos reservados."
+    "copyright": "Copyright © {{year}} Quokka. Todos los derechos reservados.",
+    "blog": "Blog"
   },
   "maintenance": {
     "message": "Quokka está actualmente en mantenimiento. Disculpa las molestias.",
@@ -125,6 +126,12 @@
     "summaryDiscount": "Descuento",
     "summaryTotal": "Total",
     "summarySubtotal": "Subtotal {{amount}}",
+    "paymentMode": "Método de pago",
+    "paymentModeCard": "Tarjeta",
+    "paymentModeBalance": "Saldo",
+    "balanceLabel": "Saldo disponible",
+    "balanceInsufficient": "Saldo insuficiente para este pago.",
+    "payWithBalanceButton": "Pagar con saldo",
     "payButton": "Pagar e iniciar la promoción",
     "viewOrders": "Ver mis pedidos"
   },

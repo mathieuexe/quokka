@@ -76,7 +76,8 @@
     "avatarAlt": "{{pseudo}} 的头像"
   },
   "footer": {
-    "copyright": "Copyright © {{year}} Quokka. 版权所有。"
+    "copyright": "Copyright © {{year}} Quokka. 保留所有权利。",
+    "blog": "博客"
   },
   "maintenance": {
     "message": "Quokka 正在维护中。给你带来不便，敬请谅解。",
@@ -125,6 +126,12 @@
     "summaryDiscount": "折扣",
     "summaryTotal": "合计",
     "summarySubtotal": "小计 {{amount}}",
+    "paymentMode": "支付方式",
+    "paymentModeCard": "银行卡",
+    "paymentModeBalance": "余额",
+    "balanceLabel": "可用余额",
+    "balanceInsufficient": "余额不足以完成本次支付。",
+    "payWithBalanceButton": "使用余额支付",
     "payButton": "支付并启动推广",
     "viewOrders": "查看我的订单"
   },

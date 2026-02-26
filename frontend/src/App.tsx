@@ -23,6 +23,8 @@ const TicketsPage = lazy(() => import("./pages/TicketsPage").then((module) => ({
 const UserProfilePage = lazy(() => import("./pages/UserProfilePage").then((module) => ({ default: module.UserProfilePage })));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage").then((module) => ({ default: module.VerifyEmailPage })));
 const Verify2FAPage = lazy(() => import("./pages/Verify2FAPage").then((module) => ({ default: module.Verify2FAPage })));
+const BlogIndexPage = lazy(() => import("./pages/BlogIndexPage").then((module) => ({ default: module.BlogIndexPage })));
+const BlogPostPage = lazy(() => import("./pages/BlogPostPage").then((module) => ({ default: module.BlogPostPage })));
 const AdminLayout = lazy(() => import("./admin/AdminLayout").then((module) => ({ default: module.AdminLayout })));
 const AdminUsersPage = lazy(() => import("./admin/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })));
 const AdminUserDetailsPage = lazy(() => import("./admin/AdminUserDetailsPage").then((module) => ({ default: module.AdminUserDetailsPage })));
@@ -36,6 +38,7 @@ const AdminManualActivationPage = lazy(() =>
 const AdminPromoCodesPage = lazy(() => import("./admin/AdminPromoCodesPage").then((module) => ({ default: module.AdminPromoCodesPage })));
 const AdminWarningsPage = lazy(() => import("./admin/AdminWarningsPage").then((module) => ({ default: module.AdminWarningsPage })));
 const AdminNotificationsPage = lazy(() => import("./admin/AdminNotificationsPage").then((module) => ({ default: module.AdminNotificationsPage })));
+const AdminBlogPage = lazy(() => import("./admin/AdminBlogPage").then((module) => ({ default: module.AdminBlogPage })));
 
 const preloaders = {
   dashboard: () => import("./pages/DashboardPage"),
@@ -52,7 +55,8 @@ const preloaders = {
   adminTickets: () => import("./admin/AdminTicketsPage"),
   adminSubscriptions: () => import("./admin/AdminSubscriptionsPage"),
   adminSettings: () => import("./admin/AdminSettingsPage"),
-  adminNotifications: () => import("./admin/AdminNotificationsPage")
+  adminNotifications: () => import("./admin/AdminNotificationsPage"),
+  adminBlog: () => import("./admin/AdminBlogPage")
 };
 
 const SITE_URL = import.meta.env.VITE_SITE_URL ?? "https://quokka.gg";
@@ -436,6 +440,8 @@ export default function App(): JSX.Element {
             <Route path="/auth/discord/success" element={<DiscordSuccess />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/mentions-legales" element={<LegalNoticePage />} />
+            <Route path="/blog" element={<BlogIndexPage />} />
+            <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/verify-2fa" element={<Verify2FAPage />} />
@@ -508,6 +514,7 @@ export default function App(): JSX.Element {
               <Route path="warnings" element={<AdminWarningsPage />} />
               <Route path="manual-activation" element={<AdminManualActivationPage />} />
               <Route path="promo-codes" element={<AdminPromoCodesPage />} />
+              <Route path="blog" element={<AdminBlogPage />} />
             </Route>
           </Routes>
         </Suspense>

@@ -50,6 +50,14 @@ async function ensureChatSchema(): Promise<void> {
       );
       await db.query(
         `
+          CREATE TABLE IF NOT EXISTS chat_guest_presence (
+            guest_pseudo text PRIMARY KEY,
+            last_seen timestamptz NOT NULL DEFAULT NOW()
+          )
+        `
+      );
+      await db.query(
+        `
           CREATE TABLE IF NOT EXISTS banned_ips (
             ip_address text PRIMARY KEY,
             created_at timestamptz NOT NULL DEFAULT NOW()
@@ -240,6 +248,14 @@ export async function upsertChatPresence(userId: string): Promise<void> {
   );
 }
 
+export async function upsertGuestPresence(guestPseudo: string): Promise<void> {
+  await ensureChatSchema();
+  await db.query(
+    "INSERT INTO chat_guest_presence (guest_pseudo, last_seen) VALUES ($1, NOW()) ON CONFLICT (guest_pseudo) DO UPDATE SET last_seen = NOW()",
+    [guestPseudo]
+  );
+}
+
 export async function deleteChatPresence(userId: string): Promise<void> {
   await ensureChatSchema();
   await db.query("DELETE FROM chat_presence WHERE user_id = $1", [userId]);
@@ -269,17 +285,12 @@ export async function listOnlineChatGuests(
   limit: number
 ): Promise<{ pseudo: string; last_seen_at: string }[]> {
   await ensureChatSchema();
-  // Cette fonction est plus complexe car les invités n'ont pas de présence suivie.
-  // On se base sur les messages récents.
   const result = await db.query(
     `
-      SELECT user_pseudo as pseudo, MAX(created_at) as last_seen_at
-      FROM chat_messages
-      WHERE message_type = 'guest'
-        AND user_pseudo IS NOT NULL
-        AND created_at > NOW() - INTERVAL '1 second' * $1
-      GROUP BY user_pseudo
-      ORDER BY user_pseudo
+      SELECT guest_pseudo as pseudo, last_seen as last_seen_at
+      FROM chat_guest_presence
+      WHERE last_seen > NOW() - INTERVAL '1 second' * $1
+      ORDER BY guest_pseudo
       LIMIT $2
     `,
     [windowSeconds, limit]

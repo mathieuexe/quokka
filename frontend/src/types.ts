@@ -29,6 +29,8 @@ export type User = {
   two_factor_enabled?: boolean;
   language?: string;
   customer_reference?: string;
+  balance_cents?: number;
+  last_balance_update?: string | null;
 };
 
 export type Server = {

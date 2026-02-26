@@ -76,7 +76,8 @@
     "avatarAlt": "{{pseudo}}のアバター"
   },
   "footer": {
-    "copyright": "Copyright © {{year}} Quokka. All rights reserved."
+    "copyright": "Copyright © {{year}} Quokka. All rights reserved.",
+    "blog": "ブログ"
   },
   "maintenance": {
     "message": "Quokka は現在メンテナンス中です。ご不便をおかけします。",
@@ -125,6 +126,12 @@
     "summaryDiscount": "割引",
     "summaryTotal": "合計",
     "summarySubtotal": "小計 {{amount}}",
+    "paymentMode": "支払い方法",
+    "paymentModeCard": "カード",
+    "paymentModeBalance": "残高",
+    "balanceLabel": "利用可能残高",
+    "balanceInsufficient": "この支払いに必要な残高が不足しています。",
+    "payWithBalanceButton": "残高で支払う",
     "payButton": "支払いして開始",
     "viewOrders": "注文を見る"
   },

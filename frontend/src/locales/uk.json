@@ -76,7 +76,8 @@
     "avatarAlt": "Аватар {{pseudo}}"
   },
   "footer": {
-    "copyright": "Copyright © {{year}} Quokka. Всі права захищені."
+    "copyright": "Copyright © {{year}} Quokka. Всі права захищені.",
+    "blog": "Блог"
   },
   "maintenance": {
     "message": "Quokka зараз на технічному обслуговуванні. Перепрошуємо за незручності.",
@@ -125,6 +126,12 @@
     "summaryDiscount": "Знижка",
     "summaryTotal": "Разом",
     "summarySubtotal": "Проміжний підсумок {{amount}}",
+    "paymentMode": "Спосіб оплати",
+    "paymentModeCard": "Картка",
+    "paymentModeBalance": "Баланс",
+    "balanceLabel": "Доступний баланс",
+    "balanceInsufficient": "Недостатньо коштів для цієї оплати.",
+    "payWithBalanceButton": "Оплатити з балансу",
     "payButton": "Оплатити та запустити промо",
     "viewOrders": "Мої замовлення"
   },

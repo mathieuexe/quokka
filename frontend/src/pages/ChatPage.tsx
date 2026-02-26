@@ -253,13 +253,14 @@ export function ChatPage(): JSX.Element {
   }, [loading, lastCreatedAt]);
 
   useEffect(() => {
-    if (!token) return;
-    void apiRequest<void>("/chat/presence", { method: "POST", token }).catch(() => undefined);
+    if (!token && !guestPseudo) return;
+    const body = !token && guestPseudo ? { guestPseudo } : undefined;
+    void apiRequest<void>("/chat/presence", { method: "POST", token: token ?? undefined, body }).catch(() => undefined);
     const interval = window.setInterval(() => {
-      void apiRequest<void>("/chat/presence", { method: "POST", token }).catch(() => undefined);
+      void apiRequest<void>("/chat/presence", { method: "POST", token: token ?? undefined, body }).catch(() => undefined);
     }, 10_000);
     return () => window.clearInterval(interval);
-  }, [token]);
+  }, [token, guestPseudo]);
 
   useEffect(() => {
     let cancelled = false;

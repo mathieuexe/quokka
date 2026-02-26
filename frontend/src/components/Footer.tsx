@@ -34,6 +34,7 @@ export function Footer(): JSX.Element {
         <div className="footer-links">
           <p>{t("footer.copyright", { year })}</p>
           <Link to="/mentions-legales">Mentions légales</Link>
+          <Link to="/blog">{t("footer.blog")}</Link>
         </div>
         <div className="footer-language-block">
           <div className="footer-language">

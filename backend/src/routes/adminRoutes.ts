@@ -23,8 +23,19 @@ import {
   updateSiteBrandingSettings,
   resendVerificationCode,
   removeAdminUser,
-  sendAdminMail
+  sendAdminMail,
+  creditAdminUserBalance
 } from "../controllers/adminController.js";
+import {
+  deleteAdminBlogCategory,
+  deleteAdminBlogPost,
+  getAdminBlogCategories,
+  getAdminBlogPosts,
+  patchAdminBlogCategory,
+  patchAdminBlogPost,
+  postAdminBlogCategory,
+  postAdminBlogPost
+} from "../controllers/blogController.js";
 import {
   getAdminTicket,
   getAdminTickets,
@@ -48,6 +59,7 @@ adminRoutes.put("/branding", updateSiteBrandingSettings);
 adminRoutes.get("/users", getAdminUsers);
 adminRoutes.get("/users/:userId", getAdminUserDetails);
 adminRoutes.post("/users/:userId/disable-2fa", disableUserTwoFactor);
+adminRoutes.post("/users/:userId/credit-balance", creditAdminUserBalance);
 adminRoutes.get("/servers", getAdminServers);
 adminRoutes.get("/promo-codes", getAdminPromoCodes);
 adminRoutes.get("/subscriptions", getAdminSubscriptions);
@@ -66,6 +78,14 @@ adminRoutes.post("/users/resend-code", resendVerificationCode);
 adminRoutes.post("/users/send-mail", sendAdminMail);
 adminRoutes.get("/notifications", getAdminNotifications);
 adminRoutes.post("/notifications/read", markAdminNotificationsRead);
+adminRoutes.get("/blog/categories", getAdminBlogCategories);
+adminRoutes.post("/blog/categories", postAdminBlogCategory);
+adminRoutes.patch("/blog/categories", patchAdminBlogCategory);
+adminRoutes.delete("/blog/categories/:categoryId", deleteAdminBlogCategory);
+adminRoutes.get("/blog/posts", getAdminBlogPosts);
+adminRoutes.post("/blog/posts", postAdminBlogPost);
+adminRoutes.patch("/blog/posts", patchAdminBlogPost);
+adminRoutes.delete("/blog/posts/:postId", deleteAdminBlogPost);
 adminRoutes.get("/tickets", getAdminTickets);
 adminRoutes.post("/tickets", postAdminTicket);
 adminRoutes.get("/tickets/:ticketId", getAdminTicket);
