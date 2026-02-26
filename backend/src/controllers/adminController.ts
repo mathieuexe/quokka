@@ -50,7 +50,7 @@ const announcementIconOptions = ["sparkles", "megaphone", "rocket", "warning", "
 const announcementSchema = z
   .object({
     is_enabled: z.boolean(),
-    text: z.string().max(200).default(""),
+    text: z.string().max(500).default(""),
     icon: z.string().max(40).optional().nullable(),
     cta_label: z.string().max(60).optional().nullable(),
     cta_url: z.string().max(300).optional().nullable(),

@@ -288,6 +288,7 @@ export function AdminSettingsPage(): JSX.Element {
               value={announcement.text}
               onChange={(event) => setAnnouncement({ ...announcement, text: event.target.value })}
               placeholder="Ex: Nouvelle version disponible aujourd'hui."
+              maxLength={500}
               required={announcement.is_enabled}
             />
           </label>
