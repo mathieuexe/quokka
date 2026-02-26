@@ -102,6 +102,9 @@ export function AdminSettingsPage(): JSX.Element {
         logout();
         showToast("Session expirée. Merci de vous reconnecter.");
         setError("Authentification requise.");
+      } else if (e instanceof ApiError && typeof e.data === "object" && e.data !== null && "issues" in e.data) {
+        const issues = (e.data as { issues?: { message?: string }[] }).issues ?? [];
+        setError(issues.map((issue) => issue.message).filter(Boolean).join(" • ") || "Données invalides.");
       } else if (e instanceof ApiError && e.status === 404) {
         setError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
       } else {
@@ -133,6 +136,9 @@ export function AdminSettingsPage(): JSX.Element {
         logout();
         showToast("Session expirée. Merci de vous reconnecter.");
         setAnnouncementError("Authentification requise.");
+      } else if (e instanceof ApiError && typeof e.data === "object" && e.data !== null && "issues" in e.data) {
+        const issues = (e.data as { issues?: { message?: string }[] }).issues ?? [];
+        setAnnouncementError(issues.map((issue) => issue.message).filter(Boolean).join(" • ") || "Données invalides.");
       } else if (e instanceof ApiError && e.status === 404) {
         setAnnouncementError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
       } else {
@@ -156,6 +162,9 @@ export function AdminSettingsPage(): JSX.Element {
         logout();
         showToast("Session expirée. Merci de vous reconnecter.");
         setBrandingError("Authentification requise.");
+      } else if (e instanceof ApiError && typeof e.data === "object" && e.data !== null && "issues" in e.data) {
+        const issues = (e.data as { issues?: { message?: string }[] }).issues ?? [];
+        setBrandingError(issues.map((issue) => issue.message).filter(Boolean).join(" • ") || "Données invalides.");
       } else if (e instanceof ApiError && e.status === 404) {
         setBrandingError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
       } else {

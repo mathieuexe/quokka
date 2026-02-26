@@ -10,10 +10,12 @@ const API_URL = /\/api(\/|$)/.test(normalizedApiUrl) ? normalizedApiUrl : `${nor
 
 export class ApiError extends Error {
   status: number;
+  data?: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, data?: unknown) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -37,7 +39,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   const data = (await response.json().catch(() => ({}))) as { message?: string };
   if (!response.ok) {
-    throw new ApiError(data.message ?? "Erreur API", response.status);
+    throw new ApiError(data.message ?? "Erreur API", response.status, data);
   }
 
   return data as T;
