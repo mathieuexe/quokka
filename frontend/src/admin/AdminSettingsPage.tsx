@@ -268,10 +268,9 @@ export function AdminSettingsPage(): JSX.Element {
               <label>
                 Lien du bouton
                 <input
-                  type="url"
                   value={announcement.cta_url}
                   onChange={(event) => setAnnouncement({ ...announcement, cta_url: event.target.value })}
-                  placeholder="https://..."
+                  placeholder="https://... ou /offres"
                 />
               </label>
             </>

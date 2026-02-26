@@ -66,16 +66,12 @@ const announcementSchema = z
         path: ["cta_label"]
       });
     }
-    if (hasUrl) {
-      try {
-        new URL(payload.cta_url?.trim() ?? "");
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "L'URL du bouton est invalide.",
-          path: ["cta_url"]
-        });
-      }
+    if (hasUrl && payload.cta_url && !isValidUrlOrPath(payload.cta_url)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "L'URL du bouton est invalide.",
+        path: ["cta_url"]
+      });
     }
     if (payload.is_enabled && !payload.text.trim()) {
       ctx.addIssue({
