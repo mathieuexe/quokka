@@ -184,9 +184,9 @@ export async function getAnnouncementSettings(): Promise<AnnouncementSettings> {
   }
 }
 
-export async function updateAnnouncementSettings(settings: AnnouncementSettings): Promise<void> {
+export async function updateAnnouncementSettings(settings: AnnouncementSettings): Promise<AnnouncementSettings> {
   await ensureAnnouncementSchema();
-  await db.query(
+  const result = await db.query<AnnouncementSettings>(
     `
       INSERT INTO announcement_settings (id, is_enabled, text, icon, cta_label, cta_url, countdown_target, updated_at)
       VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
@@ -199,9 +199,11 @@ export async function updateAnnouncementSettings(settings: AnnouncementSettings)
         cta_url = EXCLUDED.cta_url,
         countdown_target = EXCLUDED.countdown_target,
         updated_at = NOW()
+      RETURNING is_enabled, text, icon, cta_label, cta_url, countdown_target
     `,
     [settings.is_enabled, settings.text, settings.icon, settings.cta_label, settings.cta_url, settings.countdown_target]
   );
+  return result.rows[0] ?? settings;
 }
 
 export async function getSiteBrandingSettings(): Promise<SiteBrandingSettings> {

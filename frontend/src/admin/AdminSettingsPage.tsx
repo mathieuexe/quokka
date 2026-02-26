@@ -125,7 +125,8 @@ export function AdminSettingsPage(): JSX.Element {
             ? defaultAnnouncementIcon
             : announcement.icon
       };
-      await updateAnnouncementSettings(token, payload);
+      const result = await updateAnnouncementSettings(token, payload);
+      setAnnouncement(result.announcement);
       showToast("Bandeau d'information enregistré.");
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {

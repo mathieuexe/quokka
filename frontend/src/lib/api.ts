@@ -87,7 +87,7 @@ export async function getAnnouncementSettings(token: string): Promise<Announceme
 export async function updateAnnouncementSettings(
   token: string,
   settings: AnnouncementSettings
-): Promise<{ message: string }> {
+): Promise<{ message: string; announcement: AnnouncementSettings }> {
   return apiRequest("/admin/announcement", {
     method: "PUT",
     token,

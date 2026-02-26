@@ -547,7 +547,7 @@ export async function getAnnouncementSettings(_req: Request, res: Response): Pro
 
 export async function updateAnnouncementSettings(req: Request, res: Response): Promise<void> {
   const payload = announcementSchema.parse(req.body);
-  await updateAnnouncementSettingsInDb({
+  const announcement = await updateAnnouncementSettingsInDb({
     is_enabled: payload.is_enabled,
     text: payload.text.trim(),
     icon: payload.icon?.trim() ?? "",
@@ -555,7 +555,7 @@ export async function updateAnnouncementSettings(req: Request, res: Response): P
     cta_url: payload.cta_url?.trim() ?? "",
     countdown_target: payload.countdown_target?.trim() ?? ""
   });
-  res.json({ message: "Bandeau d'information mis à jour." });
+  res.json({ message: "Bandeau d'information mis à jour.", announcement });
 }
 
 export async function getSiteBrandingSettings(_req: Request, res: Response): Promise<void> {
