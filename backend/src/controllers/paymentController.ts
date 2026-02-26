@@ -4,19 +4,21 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { getServerOwner } from "../repositories/serverRepository.js";
 import {
+  createBalanceTopup,
   createBalancePayment,
   createGiftedStripePayment,
   createPendingStripePayment,
   getUserStripePaymentById,
   getUserStripePaymentByCheckoutSessionId,
   listUserStripePayments,
+  markBalanceTopupCompleted,
   markStripePaymentCompleted,
   setStripePaymentPromotionWindow,
   upsertStripePaymentPromoMeta
 } from "../repositories/paymentRepository.js";
 import { findPromoCodeByCode, incrementPromoCodeUses } from "../repositories/promoCodeRepository.js";
 import { createSubscriptionRange } from "../repositories/subscriptionRepository.js";
-import { debitUserBalanceIfEnough, findUserById } from "../repositories/userRepository.js";
+import { creditUserBalance, debitUserBalanceIfEnough, findUserById } from "../repositories/userRepository.js";
 import { generateInvoicePdf } from "../utils/invoicePdf.js";
 import { generateCustomerReference } from "../utils/references.js";
 
@@ -76,6 +78,10 @@ const promoPreviewSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Le nombre d'heures est requis pour Quokka+.", path: ["hours"] });
     }
   });
+
+const balanceTopupSchema = z.object({
+  amountEuros: z.number().positive().max(5000)
+});
 
 function normalizePromoCode(value: string): string {
   return value.trim().toUpperCase();
@@ -316,6 +322,45 @@ export async function previewPromoCode(req: Request, res: Response): Promise<voi
   });
 }
 
+export async function createBalanceTopupSession(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.sub;
+  if (!userId) {
+    res.status(401).json({ message: "Authentification requise." });
+    return;
+  }
+
+  const payload = balanceTopupSchema.parse(req.body);
+  const amountCents = Math.round(payload.amountEuros * 100);
+  const frontendOrigin = resolveFrontendOrigin(req);
+  const successUrl = `${buildFrontendUrl(frontendOrigin, "/subscriptions")}?topup=success`;
+  const cancelUrl = `${buildFrontendUrl(frontendOrigin, "/subscriptions")}?topup=cancel`;
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "eur",
+          unit_amount: amountCents,
+          product_data: {
+            name: "Recharge de solde"
+          }
+        }
+      }
+    ],
+    metadata: {
+      purpose: "balance_topup",
+      userId
+    }
+  });
+
+  await createBalanceTopup({ checkoutSessionId: session.id, userId, amountCents });
+  res.json({ checkoutUrl: session.url });
+}
+
 export async function getCheckoutSessionSummary(req: Request, res: Response): Promise<void> {
   const userId = req.user?.sub;
   if (!userId) {
@@ -351,6 +396,17 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
   const event = stripe.webhooks.constructEvent(req.body, signature, env.STRIPE_WEBHOOK_SECRET);
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
+    const purpose = typeof session.metadata?.purpose === "string" ? session.metadata.purpose : "";
+
+    if (purpose === "balance_topup") {
+      const topup = await markBalanceTopupCompleted(session.id);
+      if (topup) {
+        await creditUserBalance(topup.user_id, topup.amount_cents);
+      }
+      res.status(200).json({ received: true });
+      return;
+    }
+
     const payment = await markStripePaymentCompleted(
       session.id,
       typeof session.payment_intent === "string" ? session.payment_intent : null

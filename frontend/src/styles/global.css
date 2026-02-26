@@ -223,10 +223,10 @@ a {
 
 @keyframes announcement-marquee {
   from {
-    transform: translateX(-100%);
+    transform: translateX(100%);
   }
   to {
-    transform: translateX(100%);
+    transform: translateX(-100%);
   }
 }
 
@@ -884,9 +884,31 @@ a {
   color: var(--muted);
 }
 
-.offers-card h2,
-.offers-summary h2 {
+.offers-panel h2 {
   margin: 0 0 0.75rem;
+}
+
+.offers-unified {
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--surface-1) 0%, var(--surface-2) 100%);
+}
+
+.offers-unified-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 0.9fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.offers-panel {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-1);
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .offers-server-grid {
@@ -996,6 +1018,10 @@ a {
 
 @media (max-width: 1100px) {
   .offers-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .offers-unified-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1439,6 +1465,40 @@ a {
 .subscriptions-hero h1 {
   margin: 0;
   font-size: clamp(1.35rem, 1.1rem + 0.8vw, 1.9rem);
+}
+
+.subscriptions-balance {
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--surface-1) 0%, var(--surface-2) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.subscriptions-balance-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.subscriptions-balance-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: right;
+}
+
+.subscriptions-balance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.7rem;
+}
+
+.subscriptions-balance-actions label {
+  min-width: min(240px, 100%);
 }
 
 .subscriptions-kpi-grid {
@@ -2775,6 +2835,29 @@ select option {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.admin-user-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.admin-user-balance-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.admin-user-balance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-user-balance-actions input {
+  min-width: 180px;
 }
 
 .admin-user-actions {

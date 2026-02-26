@@ -12,6 +12,7 @@ import {
 import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
 import {
   creditUserBalance,
+  debitUserBalanceIfEnough,
   listAvailableBadges,
   listUsers,
   setUserBadgesAsAdmin,
@@ -433,6 +434,23 @@ export async function creditAdminUserBalance(req: Request, res: Response): Promi
   const amountCents = Math.round(payload.amountEuros * 100);
   const balance = await creditUserBalance(params.userId, amountCents);
   res.json({ message: "Solde crédité.", balance_cents: balance });
+}
+
+export async function debitAdminUserBalance(req: Request, res: Response): Promise<void> {
+  const params = adminUserParamsSchema.parse(req.params);
+  const payload = creditBalanceSchema.parse(req.body);
+  const user = await findUserById(params.userId);
+  if (!user) {
+    res.status(404).json({ message: "Utilisateur introuvable." });
+    return;
+  }
+  const amountCents = Math.round(payload.amountEuros * 100);
+  const result = await debitUserBalanceIfEnough(params.userId, amountCents);
+  if (!result.ok) {
+    res.status(400).json({ message: "Solde insuffisant.", balance_cents: result.balance });
+    return;
+  }
+  res.json({ message: "Solde débité.", balance_cents: result.balance });
 }
 
 export async function updateAdminServer(req: Request, res: Response): Promise<void> {

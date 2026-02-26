@@ -84,6 +84,8 @@ export function AdminUserDetailsPage(): JSX.Element {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsError, setTicketsError] = useState<string | null>(null);
+  const [balanceAmount, setBalanceAmount] = useState("");
+  const [balanceLoading, setBalanceLoading] = useState(false);
 
   const loadDetails = useCallback(async (): Promise<void> => {
     if (!token || !userId) return;
@@ -227,6 +229,46 @@ export function AdminUserDetailsPage(): JSX.Element {
     }
   }
 
+  async function updateBalance(action: "credit" | "debit"): Promise<void> {
+    if (!token || !details?.user) return;
+    const normalized = balanceAmount.replace(",", ".");
+    const amount = Number(normalized);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Montant invalide.");
+      return;
+    }
+    setBalanceLoading(true);
+    setError(null);
+    try {
+      const response = await apiRequest<{ balance_cents: number; message: string }>(
+        `/admin/users/${details.user.id}/${action}-balance`,
+        {
+          method: "POST",
+          token,
+          body: { amountEuros: amount }
+        }
+      );
+      setDetails((current) =>
+        current
+          ? {
+              ...current,
+              user: {
+                ...current.user,
+                balance_cents: response.balance_cents,
+                last_balance_update: new Date().toISOString()
+              }
+            }
+          : current
+      );
+      setBalanceAmount("");
+      showToast(response.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Mise à jour du solde impossible.");
+    } finally {
+      setBalanceLoading(false);
+    }
+  }
+
   function toggleBadge(badgeId: string): void {
     setSelectedBadges((current) =>
       current.includes(badgeId) ? current.filter((id) => id !== badgeId) : [...current, badgeId]
@@ -239,6 +281,8 @@ export function AdminUserDetailsPage(): JSX.Element {
   const target = details.user;
   const createdAt = target.created_at ? new Date(target.created_at).toLocaleString("fr-FR") : "N/A";
   const availableBadges = details.availableBadges ?? [];
+  const balanceCents = target.balance_cents ?? 0;
+  const lastBalanceUpdate = target.last_balance_update ? new Date(target.last_balance_update).toLocaleString("fr-FR") : "N/A";
 
   return (
     <div className="admin-page">
@@ -321,6 +365,37 @@ export function AdminUserDetailsPage(): JSX.Element {
               <div className="admin-user-section">
                 <h4>Note interne</h4>
                 {target.internal_note ? <p>{target.internal_note}</p> : <p className="dashboard-muted">Aucune note interne.</p>}
+              </div>
+            </div>
+
+            <div className="admin-user-section">
+              <h4>Solde</h4>
+              <div className="admin-user-balance">
+                <div className="admin-user-balance-main">
+                  <strong>{(balanceCents / 100).toFixed(2)} EUR</strong>
+                  <span className="dashboard-muted">Dernière mise à jour : {lastBalanceUpdate}</span>
+                </div>
+                <div className="admin-user-balance-actions">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="Montant en euros"
+                    value={balanceAmount}
+                    onChange={(event) => setBalanceAmount(event.target.value)}
+                  />
+                  <button className="btn" type="button" disabled={balanceLoading} onClick={() => void updateBalance("credit")}>
+                    {balanceLoading ? "Mise à jour..." : "Créditer"}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={balanceLoading}
+                    onClick={() => void updateBalance("debit")}
+                  >
+                    {balanceLoading ? "Mise à jour..." : "Débiter"}
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -494,6 +494,38 @@ export async function setStripePaymentPromotionWindow(input: {
   );
 }
 
+export async function createBalanceTopup(input: {
+  checkoutSessionId: string;
+  userId: string;
+  amountCents: number;
+}): Promise<void> {
+  await db.query(
+    `
+      INSERT INTO balance_topups (checkout_session_id, user_id, amount_cents, status)
+      VALUES ($1, $2, $3, 'pending')
+      ON CONFLICT (checkout_session_id) DO NOTHING
+    `,
+    [input.checkoutSessionId, input.userId, input.amountCents]
+  );
+}
+
+export async function markBalanceTopupCompleted(
+  checkoutSessionId: string
+): Promise<{ user_id: string; amount_cents: number } | null> {
+  const result = await db.query<{ user_id: string; amount_cents: number }>(
+    `
+      UPDATE balance_topups
+      SET status = 'completed',
+          completed_at = NOW()
+      WHERE checkout_session_id = $1
+        AND status = 'pending'
+      RETURNING user_id, amount_cents
+    `,
+    [checkoutSessionId]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function createBalancePayment(input: {
   userId: string;
   serverId: string;

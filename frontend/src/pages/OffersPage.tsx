@@ -249,199 +249,201 @@ export function OffersPage(): JSX.Element {
       )}
 
       {!loading && !error && servers.length > 0 && (
-        <div className="offers-layout">
-          <article className="card offers-card">
-            <h2>{t("offers.step1Title")}</h2>
-            <div className="offers-server-grid" role="list">
-              {servers.map((server) => (
+        <article className="card offers-unified">
+          <div className="offers-unified-grid">
+            <section className="offers-panel">
+              <h2>{t("offers.step1Title")}</h2>
+              <div className="offers-server-grid" role="list">
+                {servers.map((server) => (
+                  <button
+                    key={server.id}
+                    type="button"
+                    className={`offers-server-tile ${server.id === selectedServerId ? "is-selected" : ""}`}
+                    onClick={() => setSelectedServerId(server.id)}
+                    role="listitem"
+                  >
+                    <strong className="offers-server-name">{server.name}</strong>
+                    <span className="offers-server-meta">
+                      Ref #{server.reference_number} · {server.category_label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="offers-panel">
+              <h2>{t("offers.step2Title")}</h2>
+              <div className="offers-plan-grid">
                 <button
-                  key={server.id}
                   type="button"
-                  className={`offers-server-tile ${server.id === selectedServerId ? "is-selected" : ""}`}
-                  onClick={() => setSelectedServerId(server.id)}
-                  role="listitem"
+                  className={`offers-plan ${offerType === "essentiel" ? "is-selected" : ""}`}
+                  onClick={() => setOfferType("essentiel")}
                 >
-                  <strong className="offers-server-name">{server.name}</strong>
-                  <span className="offers-server-meta">
-                    Ref #{server.reference_number} · {server.category_label}
-                  </span>
+                  <div className="offers-plan-head">
+                    <strong>{t("offers.planEssentialName")}</strong>
+                    <span>{t("offers.planEssentialPrice")}</span>
+                  </div>
+                  <p>{t("offers.planEssentialDesc")}</p>
                 </button>
-              ))}
-            </div>
-          </article>
-
-          <article className="card offers-card">
-            <h2>{t("offers.step2Title")}</h2>
-            <div className="offers-plan-grid">
-              <button
-                type="button"
-                className={`offers-plan ${offerType === "essentiel" ? "is-selected" : ""}`}
-                onClick={() => setOfferType("essentiel")}
-              >
-                <div className="offers-plan-head">
-                  <strong>{t("offers.planEssentialName")}</strong>
-                  <span>{t("offers.planEssentialPrice")}</span>
-                </div>
-                <p>{t("offers.planEssentialDesc")}</p>
-              </button>
-              <button
-                type="button"
-                className={`offers-plan ${offerType === "quokka_plus" ? "is-selected" : ""}`}
-                onClick={() => setOfferType("quokka_plus")}
-              >
-                <div className="offers-plan-head">
-                  <strong>{t("offers.planPlusName")}</strong>
-                  <span>{t("offers.planPlusPrice")}</span>
-                </div>
-                <p>{t("offers.planPlusDesc")}</p>
-              </button>
-            </div>
-
-            {offerType === "essentiel" ? (
-              <div className="offers-params">
-                <label>
-                  {t("offers.durationDays")}
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={days}
-                    onChange={(event) => setDays(Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  {t("offers.startDate")}
-                  <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-                </label>
+                <button
+                  type="button"
+                  className={`offers-plan ${offerType === "quokka_plus" ? "is-selected" : ""}`}
+                  onClick={() => setOfferType("quokka_plus")}
+                >
+                  <div className="offers-plan-head">
+                    <strong>{t("offers.planPlusName")}</strong>
+                    <span>{t("offers.planPlusPrice")}</span>
+                  </div>
+                  <p>{t("offers.planPlusDesc")}</p>
+                </button>
               </div>
-            ) : (
-              <div className="offers-params">
-                <label>
-                  {t("offers.durationHours")}
-                  <input
-                    type="number"
-                    min={1}
-                    max={24}
-                    value={hours}
-                    onChange={(event) => setHours(Number(event.target.value))}
-                  />
-                </label>
-              </div>
-            )}
-          </article>
 
-          <aside className="card offers-summary">
-            <h2>{t("offers.step3Title")}</h2>
-            <div className="offers-summary-row">
-              <span>{t("offers.summaryServer")}</span>
-              <strong>{selectedServer ? selectedServer.name : t("common.notAvailable", { defaultValue: "—" })}</strong>
-            </div>
-            <div className="offers-summary-row">
-              <span>{t("offers.summaryOffer")}</span>
-              <strong>{offerType === "essentiel" ? t("offers.planEssentialName") : t("offers.planPlusName")}</strong>
-            </div>
-            {offerType === "essentiel" ? (
-              <>
+              {offerType === "essentiel" ? (
+                <div className="offers-params">
+                  <label>
+                    {t("offers.durationDays")}
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={days}
+                      onChange={(event) => setDays(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    {t("offers.startDate")}
+                    <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+                  </label>
+                </div>
+              ) : (
+                <div className="offers-params">
+                  <label>
+                    {t("offers.durationHours")}
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={hours}
+                      onChange={(event) => setHours(Number(event.target.value))}
+                    />
+                  </label>
+                </div>
+              )}
+            </section>
+
+            <section className="offers-panel offers-panel-summary">
+              <h2>{t("offers.step3Title")}</h2>
+              <div className="offers-summary-row">
+                <span>{t("offers.summaryServer")}</span>
+                <strong>{selectedServer ? selectedServer.name : t("common.notAvailable", { defaultValue: "—" })}</strong>
+              </div>
+              <div className="offers-summary-row">
+                <span>{t("offers.summaryOffer")}</span>
+                <strong>{offerType === "essentiel" ? t("offers.planEssentialName") : t("offers.planPlusName")}</strong>
+              </div>
+              {offerType === "essentiel" ? (
+                <>
+                  <div className="offers-summary-row">
+                    <span>{t("offers.summaryDuration")}</span>
+                    <strong>{t("offers.summaryDays", { count: clamp(days, 1, 30) })}</strong>
+                  </div>
+                  <div className="offers-summary-row">
+                    <span>{t("offers.summaryStart")}</span>
+                    <strong>{startDate || t("common.notAvailable", { defaultValue: "—" })}</strong>
+                  </div>
+                </>
+              ) : (
                 <div className="offers-summary-row">
                   <span>{t("offers.summaryDuration")}</span>
-                  <strong>{t("offers.summaryDays", { count: clamp(days, 1, 30) })}</strong>
+                  <strong>{t("offers.summaryHours", { count: clamp(hours, 1, 24) })}</strong>
                 </div>
-                <div className="offers-summary-row">
-                  <span>{t("offers.summaryStart")}</span>
-                  <strong>{startDate || t("common.notAvailable", { defaultValue: "—" })}</strong>
-                </div>
-              </>
-            ) : (
-              <div className="offers-summary-row">
-                <span>{t("offers.summaryDuration")}</span>
-                <strong>{t("offers.summaryHours", { count: clamp(hours, 1, 24) })}</strong>
-              </div>
-            )}
-            <div className="offers-summary-row">
-              <span>{t("offers.summaryPromo")}</span>
-              <strong>{appliedPromo ? appliedPromo.code : t("common.notAvailable", { defaultValue: "—" })}</strong>
-            </div>
-            <div className="offers-promo-row">
-              <input
-                value={promoCodeInput}
-                onChange={(event) => setPromoCodeInput(event.target.value.toUpperCase())}
-                placeholder={t("offers.promoPlaceholder")}
-              />
-              <button className="btn btn-ghost" type="button" onClick={() => void applyPromoCode()} disabled={promoApplying}>
-                {promoApplying ? t("common.loading") : t("offers.promoApply")}
-              </button>
-              {appliedPromo && (
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  onClick={() => {
-                    setAppliedPromo(null);
-                    setPromoError(null);
-                  }}
-                >
-                  {t("offers.promoRemove")}
-                </button>
               )}
-            </div>
-            {promoError && <p className="error-text">{promoError}</p>}
-            {appliedPromo && (
               <div className="offers-summary-row">
-                <span>{t("offers.summaryDiscount")}</span>
-                <strong>{formatPromoLabel(appliedPromo)}</strong>
+                <span>{t("offers.summaryPromo")}</span>
+                <strong>{appliedPromo ? appliedPromo.code : t("common.notAvailable", { defaultValue: "—" })}</strong>
               </div>
-            )}
-            <div className="offers-summary-total">
-              <span>{t("offers.summaryTotal")}</span>
-              <strong>{totalAmountLabel}</strong>
-            </div>
-            {appliedPromo && appliedPromo.final_amount_cents !== appliedPromo.base_amount_cents && (
-              <p className="offers-summary-note">{t("offers.summarySubtotal", { amount: baseAmountLabel })}</p>
-            )}
-            <div className="offers-summary-row">
-              <span>{t("offers.paymentMode")}</span>
-              <div className="offers-payment-options">
-                <label className="offers-payment-option">
-                  <input
-                    type="radio"
-                    name="paymentMode"
-                    value="card"
-                    checked={paymentMode === "card"}
-                    onChange={() => setPaymentMode("card")}
-                  />
-                  <span>{t("offers.paymentModeCard")}</span>
-                </label>
-                <label className="offers-payment-option">
-                  <input
-                    type="radio"
-                    name="paymentMode"
-                    value="balance"
-                    checked={paymentMode === "balance"}
-                    onChange={() => setPaymentMode("balance")}
-                  />
-                  <span>{t("offers.paymentModeBalance")}</span>
-                </label>
+              <div className="offers-promo-row">
+                <input
+                  value={promoCodeInput}
+                  onChange={(event) => setPromoCodeInput(event.target.value.toUpperCase())}
+                  placeholder={t("offers.promoPlaceholder")}
+                />
+                <button className="btn btn-ghost" type="button" onClick={() => void applyPromoCode()} disabled={promoApplying}>
+                  {promoApplying ? t("common.loading") : t("offers.promoApply")}
+                </button>
+                {appliedPromo && (
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={() => {
+                      setAppliedPromo(null);
+                      setPromoError(null);
+                    }}
+                  >
+                    {t("offers.promoRemove")}
+                  </button>
+                )}
               </div>
-            </div>
-            <div className="offers-summary-row">
-              <span>{t("offers.balanceLabel")}</span>
-              <strong>{(balanceCents / 100).toFixed(2)} EUR</strong>
-            </div>
-            {paymentMode === "balance" && !canPayWithBalance && (
-              <p className="error-text">{t("offers.balanceInsufficient")}</p>
-            )}
-            <button
-              className="btn offers-pay-btn"
-              type="button"
-              onClick={() => void startCheckout()}
-              disabled={!selectedServerId || (paymentMode === "balance" && !canPayWithBalance)}
-            >
-              {paymentMode === "balance" ? t("offers.payWithBalanceButton") : t("offers.payButton")}
-            </button>
-            <Link className="btn btn-ghost" to="/subscriptions">
-              {t("offers.viewOrders")}
-            </Link>
-          </aside>
-        </div>
+              {promoError && <p className="error-text">{promoError}</p>}
+              {appliedPromo && (
+                <div className="offers-summary-row">
+                  <span>{t("offers.summaryDiscount")}</span>
+                  <strong>{formatPromoLabel(appliedPromo)}</strong>
+                </div>
+              )}
+              <div className="offers-summary-total">
+                <span>{t("offers.summaryTotal")}</span>
+                <strong>{totalAmountLabel}</strong>
+              </div>
+              {appliedPromo && appliedPromo.final_amount_cents !== appliedPromo.base_amount_cents && (
+                <p className="offers-summary-note">{t("offers.summarySubtotal", { amount: baseAmountLabel })}</p>
+              )}
+              <div className="offers-summary-row">
+                <span>{t("offers.paymentMode")}</span>
+                <div className="offers-payment-options">
+                  <label className="offers-payment-option">
+                    <input
+                      type="radio"
+                      name="paymentMode"
+                      value="card"
+                      checked={paymentMode === "card"}
+                      onChange={() => setPaymentMode("card")}
+                    />
+                    <span>{t("offers.paymentModeCard")}</span>
+                  </label>
+                  <label className="offers-payment-option">
+                    <input
+                      type="radio"
+                      name="paymentMode"
+                      value="balance"
+                      checked={paymentMode === "balance"}
+                      onChange={() => setPaymentMode("balance")}
+                    />
+                    <span>{t("offers.paymentModeBalance")}</span>
+                  </label>
+                </div>
+              </div>
+              <div className="offers-summary-row">
+                <span>{t("offers.balanceLabel")}</span>
+                <strong>{(balanceCents / 100).toFixed(2)} EUR</strong>
+              </div>
+              {paymentMode === "balance" && !canPayWithBalance && (
+                <p className="error-text">{t("offers.balanceInsufficient")}</p>
+              )}
+              <button
+                className="btn offers-pay-btn"
+                type="button"
+                onClick={() => void startCheckout()}
+                disabled={!selectedServerId || (paymentMode === "balance" && !canPayWithBalance)}
+              >
+                {paymentMode === "balance" ? t("offers.payWithBalanceButton") : t("offers.payButton")}
+              </button>
+              <Link className="btn btn-ghost" to="/subscriptions">
+                {t("offers.viewOrders")}
+              </Link>
+            </section>
+          </div>
+        </article>
       )}
     </section>
   );

@@ -69,6 +69,8 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
       last_login_at: user.last_login_at,
       email_verified: user.email_verified,
       two_factor_enabled: user.two_factor_enabled,
+      balance_cents: user.balance_cents,
+      last_balance_update: user.last_balance_update,
       discord_url: user.discord_url,
       x_url: user.x_url,
       bluesky_url: user.bluesky_url,
@@ -78,8 +80,6 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
       kick_url: user.kick_url,
       snapchat_url: user.snapchat_url,
       tiktok_url: user.tiktok_url,
-      balance_cents: user.balance_cents,
-      last_balance_update: user.last_balance_update,
       badges,
       role: user.role
     },

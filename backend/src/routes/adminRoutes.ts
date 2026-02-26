@@ -24,7 +24,8 @@ import {
   resendVerificationCode,
   removeAdminUser,
   sendAdminMail,
-  creditAdminUserBalance
+  creditAdminUserBalance,
+  debitAdminUserBalance
 } from "../controllers/adminController.js";
 import {
   deleteAdminBlogCategory,
@@ -60,6 +61,7 @@ adminRoutes.get("/users", getAdminUsers);
 adminRoutes.get("/users/:userId", getAdminUserDetails);
 adminRoutes.post("/users/:userId/disable-2fa", disableUserTwoFactor);
 adminRoutes.post("/users/:userId/credit-balance", creditAdminUserBalance);
+adminRoutes.post("/users/:userId/debit-balance", debitAdminUserBalance);
 adminRoutes.get("/servers", getAdminServers);
 adminRoutes.get("/promo-codes", getAdminPromoCodes);
 adminRoutes.get("/subscriptions", getAdminSubscriptions);
