@@ -5,8 +5,6 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, CreditCard, LifeBuoy, LogOut, Menu, ShieldCheck, User, X, Zap } from "lucide-react";
 import type { SiteBrandingSettings } from "../lib/api";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
-
 type HeaderProps = {
   variant?: "default" | "home";
   branding?: SiteBrandingSettings | null;

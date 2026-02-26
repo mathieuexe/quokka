@@ -8,13 +8,14 @@ import {
   updateAnnouncementSettings,
   getSiteBrandingSettings,
   updateSiteBrandingSettings,
+  ApiError,
   MaintenanceSettings,
   AnnouncementSettings,
   SiteBrandingSettings
 } from "../lib/api";
 
 export function AdminSettingsPage(): JSX.Element {
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   const { showToast } = useToast();
   const [settings, setSettings] = useState<MaintenanceSettings>({ is_enabled: false, message: "", allowed_ips: "" });
   const [announcement, setAnnouncement] = useState<AnnouncementSettings>({
@@ -63,10 +64,24 @@ export function AdminSettingsPage(): JSX.Element {
           getSiteBrandingSettings(token)
         ]);
         setSettings(maintenanceResult);
-        setAnnouncement(announcementResult);
+        setAnnouncement({
+          ...announcementResult,
+          icon:
+            announcementResult.is_enabled && !announcementResult.icon.trim()
+              ? defaultAnnouncementIcon
+              : announcementResult.icon
+        });
         setBranding(brandingResult);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Chargement des paramètres impossible.");
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          logout();
+          showToast("Session expirée. Merci de vous reconnecter.");
+          setError("Authentification requise.");
+        } else if (e instanceof ApiError && e.status === 404) {
+          setError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
+        } else {
+          setError(e instanceof Error ? e.message : "Chargement des paramètres impossible.");
+        }
       } finally {
         setLoading(false);
       }
@@ -83,7 +98,15 @@ export function AdminSettingsPage(): JSX.Element {
       await updateMaintenanceSettings(token, settings);
       showToast("Paramètres de maintenance enregistrés.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Mise à jour impossible.");
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        showToast("Session expirée. Merci de vous reconnecter.");
+        setError("Authentification requise.");
+      } else if (e instanceof ApiError && e.status === 404) {
+        setError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
+      } else {
+        setError(e instanceof Error ? e.message : "Mise à jour impossible.");
+      }
     } finally {
       setSaving(false);
     }
@@ -95,10 +118,25 @@ export function AdminSettingsPage(): JSX.Element {
     setAnnouncementSaving(true);
     setAnnouncementError(null);
     try {
-      await updateAnnouncementSettings(token, announcement);
+      const payload = {
+        ...announcement,
+        icon:
+          announcement.is_enabled && !announcement.icon.trim()
+            ? defaultAnnouncementIcon
+            : announcement.icon
+      };
+      await updateAnnouncementSettings(token, payload);
       showToast("Bandeau d'information enregistré.");
     } catch (e) {
-      setAnnouncementError(e instanceof Error ? e.message : "Mise à jour impossible.");
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        showToast("Session expirée. Merci de vous reconnecter.");
+        setAnnouncementError("Authentification requise.");
+      } else if (e instanceof ApiError && e.status === 404) {
+        setAnnouncementError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
+      } else {
+        setAnnouncementError(e instanceof Error ? e.message : "Mise à jour impossible.");
+      }
     } finally {
       setAnnouncementSaving(false);
     }
@@ -113,7 +151,15 @@ export function AdminSettingsPage(): JSX.Element {
       await updateSiteBrandingSettings(token, branding);
       showToast("Identité du site enregistrée.");
     } catch (e) {
-      setBrandingError(e instanceof Error ? e.message : "Mise à jour impossible.");
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        showToast("Session expirée. Merci de vous reconnecter.");
+        setBrandingError("Authentification requise.");
+      } else if (e instanceof ApiError && e.status === 404) {
+        setBrandingError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
+      } else {
+        setBrandingError(e instanceof Error ? e.message : "Mise à jour impossible.");
+      }
     } finally {
       setBrandingSaving(false);
     }
