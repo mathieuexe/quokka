@@ -13,6 +13,7 @@ import {
   listUserTickets,
   updateTicket
 } from "../repositories/ticketRepository.js";
+import { insertAdminNotification } from "../repositories/notificationRepository.js";
 
 const TICKET_STATUSES = [
   "En attente d’attribution",
@@ -260,6 +261,16 @@ export async function postUserTicket(req: Request, res: Response): Promise<void>
       });
       const ticket = await getTicketById(created.ticket.id);
       const messages = await getTicketMessages(created.ticket.id);
+      try {
+        await insertAdminNotification({
+          type: "ticket_opened",
+          priority: 9,
+          title: `Ticket ouvert: ${reference}`,
+          message: `${payload.category}${payload.subcategory ? ` — ${payload.subcategory}` : ""}`,
+          userId,
+          ticketId: created.ticket.id
+        });
+      } catch {}
       res.status(201).json({ ticket, messages, reference });
       return;
     } catch (error) {
@@ -313,6 +324,16 @@ export async function postUserTicketMessage(req: Request, res: Response): Promis
     attachments,
     nextStatus
   });
+  try {
+    await insertAdminNotification({
+      type: "ticket_user_replied",
+      priority: 9,
+      title: `Réponse client sur le ticket ${ticket.reference}`,
+      message: payload.message.slice(0, 180),
+      userId,
+      ticketId
+    });
+  } catch {}
   res.status(201).json({ message });
 }
 

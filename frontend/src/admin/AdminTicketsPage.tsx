@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
 
@@ -134,6 +135,7 @@ function getStatusClass(status: string): string {
 
 export function AdminTicketsPage(): JSX.Element {
   const { token, user } = useAuth();
+  const location = useLocation();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
@@ -228,6 +230,16 @@ export function AdminTicketsPage(): JSX.Element {
       setCreateSubcategory("");
     }
   }, [createCategoryConfig]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const ticketId = params.get("ticketId");
+    if (ticketId && ticketId !== selectedTicketId) {
+      setSelectedTicketId(ticketId);
+      void loadTicket(ticketId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   async function loadTicket(ticketId: string): Promise<void> {
     if (!token) return;

@@ -34,6 +34,7 @@ const AdminManualActivationPage = lazy(() =>
 );
 const AdminPromoCodesPage = lazy(() => import("./admin/AdminPromoCodesPage").then((module) => ({ default: module.AdminPromoCodesPage })));
 const AdminWarningsPage = lazy(() => import("./admin/AdminWarningsPage").then((module) => ({ default: module.AdminWarningsPage })));
+const AdminNotificationsPage = lazy(() => import("./admin/AdminNotificationsPage").then((module) => ({ default: module.AdminNotificationsPage })));
 
 const preloaders = {
   dashboard: () => import("./pages/DashboardPage"),
@@ -49,7 +50,8 @@ const preloaders = {
   adminServers: () => import("./admin/AdminServersPage"),
   adminTickets: () => import("./admin/AdminTicketsPage"),
   adminSubscriptions: () => import("./admin/AdminSubscriptionsPage"),
-  adminSettings: () => import("./admin/AdminSettingsPage")
+  adminSettings: () => import("./admin/AdminSettingsPage"),
+  adminNotifications: () => import("./admin/AdminNotificationsPage")
 };
 
 const SITE_URL = import.meta.env.VITE_SITE_URL ?? "https://quokka.gg";
@@ -252,6 +254,7 @@ export default function App(): JSX.Element {
         preloaders.adminTickets();
         preloaders.adminSubscriptions();
         preloaders.adminSettings();
+        preloaders.adminNotifications();
         return;
       }
       if (isAuthenticated) {
@@ -362,6 +365,7 @@ export default function App(): JSX.Element {
               <Route path="settings" element={<AdminSettingsPage />} />
               <Route path="subscriptions" element={<AdminSubscriptionsPage />} />
               <Route path="tickets" element={<AdminTicketsPage />} />
+              <Route path="notifications" element={<AdminNotificationsPage />} />
               <Route path="warnings" element={<AdminWarningsPage />} />
               <Route path="manual-activation" element={<AdminManualActivationPage />} />
               <Route path="promo-codes" element={<AdminPromoCodesPage />} />

@@ -13,6 +13,7 @@ import {
 } from "../repositories/serverRepository.js";
 import { ensureMonthlyLikesReset, VoteRuleError, voteForServer } from "../repositories/voteRepository.js";
 import { verifyAccessToken } from "../utils/jwt.js";
+import { insertAdminNotification } from "../repositories/notificationRepository.js";
 
 const addServerSchema = z.object({
   categoryId: z.string().uuid(),
@@ -177,6 +178,17 @@ export async function addServer(req: Request, res: Response): Promise<void> {
     bannerUrl: payload.bannerUrl || undefined,
     isPublic: payload.isPublic
   });
+
+  try {
+    await insertAdminNotification({
+      type: "server_added",
+      priority: 7,
+      title: `Nouveau serveur ajouté: ${payload.name}`,
+      message: `Catégorie: ${category.slug.toUpperCase()}`,
+      userId,
+      serverId: server.id
+    });
+  } catch {}
 
   res.status(201).json(server);
 }

@@ -27,6 +27,7 @@ import {
   updateMaintenanceSettings as updateMaintenanceSettingsInDb,
   getMaintenanceSettings as getMaintenanceSettingsFromDb
 } from "../repositories/systemRepository.js";
+import { countUnreadNotifications, listAdminNotifications, markNotificationsRead } from "../repositories/notificationRepository.js";
 
 const maintenanceSchema = z.object({
   is_enabled: z.boolean(),
@@ -172,6 +173,13 @@ export async function getAdminServers(req: Request, res: Response): Promise<void
 export async function getAdminSubscriptions(_req: Request, res: Response): Promise<void> {
   const subscriptions = await listAllSubscriptions();
   res.json({ subscriptions });
+}
+
+export async function getAdminNotifications(req: Request, res: Response): Promise<void> {
+  const onlyUnread = req.query.onlyUnread === "true";
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit ?? 100)));
+  const [items, unreadCount] = await Promise.all([listAdminNotifications({ onlyUnread, limit }), countUnreadNotifications()]);
+  res.json({ notifications: items, unreadCount });
 }
 
 export async function getAdminUserDetails(req: Request, res: Response): Promise<void> {
@@ -322,6 +330,18 @@ export async function updateAdminServer(req: Request, res: Response): Promise<vo
     verified: payload.verified
   });
   res.json({ message: "Serveur mis à jour." });
+}
+
+export async function markAdminNotificationsRead(req: Request, res: Response): Promise<void> {
+  const body = z
+    .object({
+      all: z.boolean().optional(),
+      ids: z.array(z.string().uuid()).optional()
+    })
+    .parse(req.body);
+  await markNotificationsRead({ all: body.all === true, ids: body.ids });
+  const unreadCount = await countUnreadNotifications();
+  res.json({ message: "Notifications mises à jour.", unreadCount });
 }
 
 export async function removeAdminServer(req: Request, res: Response): Promise<void> {

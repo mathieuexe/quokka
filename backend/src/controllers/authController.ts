@@ -39,6 +39,7 @@ import {
   generateLoginAlertTemplate
 } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
+import { insertAdminNotification } from "../repositories/notificationRepository.js";
 
 
 const registerSchema = z
@@ -196,6 +197,16 @@ export async function register(req: Request, res: Response): Promise<void> {
     passwordHash,
     language: payload.language
   });
+
+  try {
+    await insertAdminNotification({
+      type: "user_registered",
+      priority: 6,
+      title: `Nouvel utilisateur inscrit: ${user.pseudo}`,
+      message: `Email: ${user.email}`,
+      userId: user.id
+    });
+  } catch {}
 
   try {
     const ipTrace = await resolveIpTrace(getRequestIp(req));
@@ -534,6 +545,16 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
       discordLocale: discordUser.locale ?? null,
       discordProfile: discordUserRaw
     });
+
+    try {
+      await insertAdminNotification({
+        type: "user_registered",
+        priority: 6,
+        title: `Nouvel utilisateur inscrit: ${user.pseudo}`,
+        message: `Email: ${user.email}`,
+        userId: user.id
+      });
+    } catch {}
 
     try {
       const isAmongFirst100 = await isUserAmongFirst100(user.id);

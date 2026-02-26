@@ -30,6 +30,7 @@ import {
   postAdminTicketMessage
 } from "../controllers/ticketController.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { getAdminNotifications, markAdminNotificationsRead } from "../controllers/adminController.js";
 
 export const adminRoutes = Router();
 
@@ -54,6 +55,8 @@ adminRoutes.patch("/servers/hide", hideServer);
 adminRoutes.patch("/servers/visible", makeServerVisible);
 adminRoutes.post("/users/resend-code", resendVerificationCode);
 adminRoutes.post("/users/send-mail", sendAdminMail);
+adminRoutes.get("/notifications", getAdminNotifications);
+adminRoutes.post("/notifications/read", markAdminNotificationsRead);
 adminRoutes.get("/tickets", getAdminTickets);
 adminRoutes.post("/tickets", postAdminTicket);
 adminRoutes.get("/tickets/:ticketId", getAdminTicket);
