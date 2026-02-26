@@ -72,6 +72,23 @@ export function HomePage(): JSX.Element {
                 </Link>
               </div>
             </div>
+            <div className="home-v2-hero-side">
+              <article className="card home-v2-promo-card">
+                <div>
+                  <span className="home-v2-kicker">Promotion</span>
+                  <h2>Boostez votre serveur</h2>
+                  <p>Choisissez un serveur, sélectionnez l’offre et payez en toute sécurité.</p>
+                  <ul className="home-v2-side-list">
+                    <li>Sélection du serveur</li>
+                    <li>Offre Essentiel ou Quokka+</li>
+                    <li>Paiement et code promo</li>
+                  </ul>
+                </div>
+                <Link className="btn home-v2-promo-btn" to="/offers">
+                  Promouvoir mon serveur
+                </Link>
+              </article>
+            </div>
           </div>
         </div>
       </div>

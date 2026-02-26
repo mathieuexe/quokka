@@ -194,7 +194,15 @@ export async function getChatOnlineUsers(req: Request, res: Response): Promise<v
   const windowSeconds = query.window ?? 60;
   const limit = query.limit ?? 50;
   const users = await listOnlineChatUsers(windowSeconds, limit);
-  res.json({ users });
+  res.json({
+    users: users.map((user) => ({
+      user_id: user.id,
+      user_pseudo: user.pseudo,
+      user_avatar_url: user.avatar_url,
+      user_role: user.role,
+      last_seen_at: user.last_seen
+    }))
+  });
 }
 
 export async function getChatOnlineGuests(req: Request, res: Response): Promise<void> {
@@ -202,7 +210,12 @@ export async function getChatOnlineGuests(req: Request, res: Response): Promise<
   const windowSeconds = query.window ?? 60;
   const limit = query.limit ?? 50;
   const guests = await listOnlineChatGuests(windowSeconds, limit);
-  res.json({ guests });
+  res.json({
+    guests: guests.map((guest) => ({
+      guest_pseudo: guest.pseudo,
+      last_seen_at: guest.last_seen_at
+    }))
+  });
 }
 
 export async function postChatClear(req: Request, res: Response): Promise<void> {

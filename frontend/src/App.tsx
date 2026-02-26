@@ -389,18 +389,32 @@ export default function App(): JSX.Element {
     : null;
   const announcementCtaLabel = announcement?.cta_label?.trim() ?? "";
   const announcementCtaUrl = announcement?.cta_url?.trim() ?? "";
+  const announcementToneByIcon: Record<string, string> = {
+    warning: "alert",
+    sparkles: "sparkles",
+    megaphone: "announcement",
+    rocket: "launch",
+    gift: "offer",
+    bell: "info"
+  };
+  const announcementTone = announcementToneByIcon[announcementIcon || "bell"] ?? "info";
+  const announcementLine = announcementCountdown ? `${announcementText} • Fin dans ${announcementCountdown}` : announcementText;
 
   return (
     <div className={`app-shell ${isAdminArea ? "app-shell-admin" : ""}`}>
       {announcementVisible && (
-        <div className="site-header-announcement">
+        <div className={`site-header-announcement site-header-announcement--${announcementTone}`}>
           <div className="site-header-announcement-track">
             {announcementIcon && (
               <span className="site-header-announcement-icon">{announcementIcons[announcementIcon] ?? "ℹ️"}</span>
             )}
             <div className="site-header-announcement-message">
-              <span>{announcementText}</span>
-              {announcementCountdown && <span className="site-header-announcement-countdown">Fin dans {announcementCountdown}</span>}
+              <div className="site-header-announcement-marquee">
+                <div className="site-header-announcement-marquee-track">
+                  <span>{announcementLine}</span>
+                  <span>{announcementLine}</span>
+                </div>
+              </div>
             </div>
             {announcementCtaLabel && announcementCtaUrl && (
               <a className="site-header-announcement-btn" href={announcementCtaUrl} target="_blank" rel="noreferrer">

@@ -248,11 +248,11 @@ export async function deleteChatPresence(userId: string): Promise<void> {
 export async function listOnlineChatUsers(
   windowSeconds: number,
   limit: number
-): Promise<{ id: string; pseudo: string; avatar_url: string | null }[]> {
+): Promise<{ id: string; pseudo: string; avatar_url: string | null; role: "user" | "admin"; last_seen: string }[]> {
   await ensureChatSchema();
   const result = await db.query(
     `
-      SELECT u.id, u.pseudo, u.avatar_url
+      SELECT u.id, u.pseudo, u.avatar_url, u.role, p.last_seen
       FROM users u
       JOIN chat_presence p ON u.id = p.user_id
       WHERE p.last_seen > NOW() - INTERVAL '1 second' * $1
@@ -267,17 +267,18 @@ export async function listOnlineChatUsers(
 export async function listOnlineChatGuests(
   windowSeconds: number,
   limit: number
-): Promise<{ pseudo: string }[]> {
+): Promise<{ pseudo: string; last_seen_at: string }[]> {
   await ensureChatSchema();
   // Cette fonction est plus complexe car les invités n'ont pas de présence suivie.
   // On se base sur les messages récents.
   const result = await db.query(
     `
-      SELECT DISTINCT user_pseudo as pseudo
+      SELECT user_pseudo as pseudo, MAX(created_at) as last_seen_at
       FROM chat_messages
       WHERE message_type = 'guest'
         AND user_pseudo IS NOT NULL
         AND created_at > NOW() - INTERVAL '1 second' * $1
+      GROUP BY user_pseudo
       ORDER BY user_pseudo
       LIMIT $2
     `,
