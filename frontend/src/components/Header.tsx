@@ -3,19 +3,23 @@ import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, CreditCard, LifeBuoy, LogOut, Menu, ShieldCheck, User, X, Zap } from "lucide-react";
+import type { SiteBrandingSettings } from "../lib/api";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
 
 type HeaderProps = {
   variant?: "default" | "home";
+  branding?: SiteBrandingSettings | null;
 };
 
-export function Header({ variant = "default" }: HeaderProps): JSX.Element {
+export function Header({ variant = "default", branding }: HeaderProps): JSX.Element {
   const { isAuthenticated, user, logout } = useAuth();
   const { t } = useTranslation();
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAdmin = user?.role === "admin";
+  const brandTitle = branding?.site_title?.trim() || "Quokka";
+  const brandLogo = branding?.logo_url?.trim() || "/images/logo/logorond.png";
 
   function warmRoute(target: "dashboard" | "chat" | "addServer" | "tickets" | "adminLayout"): void {
     const win = window as Window & {
@@ -71,9 +75,9 @@ export function Header({ variant = "default" }: HeaderProps): JSX.Element {
       <div className="site-header-inner">
         <div className="site-header-left">
           <Link to="/" className="site-header-brand" onClick={closeMenus} aria-label={t("header.ariaHome")}>
-            <img className="site-header-logo" src="/images/logo/logorond.png" alt="" aria-hidden="true" />
+            <img className="site-header-logo" src={brandLogo} alt="" aria-hidden="true" />
             <span className="site-header-brand-text">
-              <strong>Quokka</strong>
+              <strong>{brandTitle}</strong>
               <span>{t("header.tagline")}</span>
             </span>
           </Link>

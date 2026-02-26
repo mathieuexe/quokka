@@ -17,6 +17,10 @@ import {
   updateAdminUser,
   getMaintenanceSettings,
   updateMaintenanceSettings,
+  getAnnouncementSettings,
+  updateAnnouncementSettings,
+  getSiteBrandingSettings,
+  updateSiteBrandingSettings,
   resendVerificationCode,
   removeAdminUser,
   sendAdminMail
@@ -37,6 +41,10 @@ export const adminRoutes = Router();
 adminRoutes.use(requireAuth, requireAdmin);
 adminRoutes.get("/maintenance", getMaintenanceSettings);
 adminRoutes.put("/maintenance", updateMaintenanceSettings);
+adminRoutes.get("/announcement", getAnnouncementSettings);
+adminRoutes.put("/announcement", updateAnnouncementSettings);
+adminRoutes.get("/branding", getSiteBrandingSettings);
+adminRoutes.put("/branding", updateSiteBrandingSettings);
 adminRoutes.get("/users", getAdminUsers);
 adminRoutes.get("/users/:userId", getAdminUserDetails);
 adminRoutes.post("/users/:userId/disable-2fa", disableUserTwoFactor);

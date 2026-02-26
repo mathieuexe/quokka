@@ -6,6 +6,7 @@ import { EmailVerificationBanner } from "./components/EmailVerificationBanner";
 import { useAuth } from "./context/AuthContext";
 import { HomePage } from "./pages/HomePage";
 import { LegalNoticePage } from "./pages/LegalNoticePage";
+import { AnnouncementSettings, SiteBrandingSettings, getPublicAnnouncementSettings, getPublicBrandingSettings } from "./lib/api";
 const AddServerPage = lazy(() => import("./pages/AddServerPage").then((module) => ({ default: module.AddServerPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then((module) => ({ default: module.ChatPage })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
@@ -81,6 +82,15 @@ type SeoData = {
   canonical: string;
 };
 
+const announcementIcons: Record<string, string> = {
+  sparkles: "✨",
+  megaphone: "📣",
+  rocket: "🚀",
+  warning: "⚠️",
+  gift: "🎁",
+  bell: "🔔"
+};
+
 function schedulePreload(callback: () => void): void {
   const win = window as Window & {
     requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
@@ -92,15 +102,18 @@ function schedulePreload(callback: () => void): void {
   window.setTimeout(callback, 800);
 }
 
-function resolveSeo(pathname: string): SeoData {
+function resolveSeo(pathname: string, branding?: SiteBrandingSettings | null): SeoData {
   const canonical = new URL(pathname, SITE_URL).toString();
   const noindex = pathname.startsWith("/admin") || NOINDEX_PATHS.some((path) => pathname.startsWith(path));
   const robots = noindex ? "noindex, nofollow" : "index, follow";
+  const brandTitle = branding?.site_title?.trim() || DEFAULT_TITLE;
+  const brandDescription = branding?.site_description?.trim() || DEFAULT_DESCRIPTION;
 
   if (pathname === "/") {
     return {
-      title: DEFAULT_TITLE,
+      title: brandTitle,
       description:
+        branding?.site_description?.trim() ||
         "Annuaire serveur Discord et gaming: liste, top et classement pour trouver un serveur Discord français, ajouter un serveur Discord gratuitement et promouvoir votre communauté.",
       robots,
       canonical
@@ -139,7 +152,7 @@ function resolveSeo(pathname: string): SeoData {
 
   if (pathname === "/mentions-legales") {
     return {
-      title: "Mentions légales | Quokka",
+      title: `Mentions légales | ${brandTitle}`,
       description:
         "Informations légales, hébergeur, propriété intellectuelle et cookies du site Quokka.",
       robots,
@@ -147,7 +160,7 @@ function resolveSeo(pathname: string): SeoData {
     };
   }
 
-  return { title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION, robots, canonical };
+  return { title: brandTitle, description: brandDescription, robots, canonical };
 }
 
 function setMetaTag(name: string, content: string): void {
@@ -172,6 +185,33 @@ function setMetaProperty(property: string, content: string): void {
 
 import { MaintenanceBanner } from "./components/MaintenanceBanner";
 
+function setFavicon(url: string): void {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement("link");
+    link.setAttribute("rel", "icon");
+    document.head.appendChild(link);
+  }
+  link.setAttribute("href", trimmed);
+}
+
+function formatCountdown(target: string, nowMs: number): string | null {
+  const targetMs = Date.parse(target);
+  if (!target || Number.isNaN(targetMs)) return null;
+  const diff = targetMs - nowMs;
+  if (diff <= 0) return null;
+  const totalMinutes = Math.floor(diff / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const dayPart = days > 0 ? `${days}j ` : "";
+  const hourPart = `${hours}`.padStart(2, "0");
+  const minutePart = `${minutes}`.padStart(2, "0");
+  return `${dayPart}${hourPart}h ${minutePart}m`;
+}
+
 function PrivateRoute({ children }: { children: JSX.Element }): JSX.Element {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? children : <Navigate to="/login" replace />;
@@ -187,6 +227,9 @@ function AdminRoute({ children }: { children: JSX.Element }): JSX.Element {
 export default function App(): JSX.Element {
   const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
   const [showMaintenanceBanner, setShowMaintenanceBanner] = useState(false);
+  const [announcement, setAnnouncement] = useState<AnnouncementSettings | null>(null);
+  const [announcementNow, setAnnouncementNow] = useState(Date.now());
+  const [branding, setBranding] = useState<SiteBrandingSettings | null>(null);
   const location = useLocation();
   const { isAuthenticated, user } = useAuth();
   const isAdminArea = location.pathname.startsWith("/admin");
@@ -219,20 +262,67 @@ export default function App(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    const seo = resolveSeo(location.pathname);
+    let cancelled = false;
+    void getPublicAnnouncementSettings()
+      .then((data) => {
+        if (!cancelled) {
+          setAnnouncement(data.announcement);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAnnouncement(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getPublicBrandingSettings()
+      .then((data) => {
+        if (!cancelled) {
+          setBranding(data.branding);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBranding(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!announcement?.countdown_target || !announcement.is_enabled) return;
+    setAnnouncementNow(Date.now());
+    const timer = window.setInterval(() => setAnnouncementNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, [announcement?.countdown_target, announcement?.is_enabled]);
+
+  useEffect(() => {
+    const seo = resolveSeo(location.pathname, branding);
+    const defaultImage = branding?.logo_url?.trim() || DEFAULT_IMAGE;
     document.title = seo.title;
     setMetaTag("description", seo.description);
     setMetaTag("robots", seo.robots);
     setMetaProperty("og:title", seo.title);
     setMetaProperty("og:description", seo.description);
     setMetaProperty("og:url", seo.canonical);
-    setMetaProperty("og:image", DEFAULT_IMAGE);
-    setMetaProperty("og:site_name", "Quokka");
+    setMetaProperty("og:image", defaultImage);
+    setMetaProperty("og:site_name", branding?.site_title?.trim() || "Quokka");
     setMetaProperty("og:type", "website");
     setMetaTag("twitter:card", "summary_large_image");
     setMetaTag("twitter:title", seo.title);
     setMetaTag("twitter:description", seo.description);
-    setMetaTag("twitter:image", DEFAULT_IMAGE);
+    setMetaTag("twitter:image", defaultImage);
+    if (branding?.favicon_url?.trim()) {
+      setFavicon(branding.favicon_url);
+    }
 
     const canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
     if (canonical) {
@@ -243,7 +333,7 @@ export default function App(): JSX.Element {
       link.setAttribute("href", seo.canonical);
       document.head.appendChild(link);
     }
-  }, [location.pathname]);
+  }, [location.pathname, branding]);
 
   useEffect(() => {
     schedulePreload(() => {
@@ -277,17 +367,44 @@ export default function App(): JSX.Element {
     return (
       <div className="app-shell">
         <Suspense fallback={<div className="page">Chargement...</div>}>
-          <MaintenancePage />
+          <MaintenancePage branding={branding} />
         </Suspense>
       </div>
     );
   }
 
+  const announcementText = announcement?.text?.trim() ?? "";
+  const announcementVisible = Boolean(announcement?.is_enabled && announcementText);
+  const announcementIcon = announcement?.icon?.trim() ?? "";
+  const announcementCountdown = announcement?.countdown_target
+    ? formatCountdown(announcement.countdown_target, announcementNow)
+    : null;
+  const announcementCtaLabel = announcement?.cta_label?.trim() ?? "";
+  const announcementCtaUrl = announcement?.cta_url?.trim() ?? "";
+
   return (
     <div className={`app-shell ${isAdminArea ? "app-shell-admin" : ""}`}>
+      {announcementVisible && (
+        <div className="site-header-announcement">
+          <div className="site-header-announcement-track">
+            {announcementIcon && (
+              <span className="site-header-announcement-icon">{announcementIcons[announcementIcon] ?? "ℹ️"}</span>
+            )}
+            <div className="site-header-announcement-message">
+              <span>{announcementText}</span>
+              {announcementCountdown && <span className="site-header-announcement-countdown">Fin dans {announcementCountdown}</span>}
+            </div>
+            {announcementCtaLabel && announcementCtaUrl && (
+              <a className="site-header-announcement-btn" href={announcementCtaUrl} target="_blank" rel="noreferrer">
+                {announcementCtaLabel}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
       {showMaintenanceBanner && <MaintenanceBanner />}
       {!isAdminArea && <EmailVerificationBanner />}
-      {!isAdminArea && <Header variant="home" />}
+      {!isAdminArea && <Header variant="home" branding={branding} />}
       <main className={isAdminArea ? "main-content admin-main-content" : "main-content"}>
         <Suspense fallback={<div className="page">Chargement...</div>}>
           <Routes>

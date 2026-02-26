@@ -31,7 +31,11 @@ import {
 import { generateCustomerReference } from "../utils/references.js";
 import {
   updateMaintenanceSettings as updateMaintenanceSettingsInDb,
-  getMaintenanceSettings as getMaintenanceSettingsFromDb
+  getMaintenanceSettings as getMaintenanceSettingsFromDb,
+  getAnnouncementSettings as getAnnouncementSettingsFromDb,
+  updateAnnouncementSettings as updateAnnouncementSettingsInDb,
+  getSiteBrandingSettings as getSiteBrandingSettingsFromDb,
+  updateSiteBrandingSettings as updateSiteBrandingSettingsInDb
 } from "../repositories/systemRepository.js";
 import { countUnreadNotifications, listAdminNotifications, markNotificationsRead } from "../repositories/notificationRepository.js";
 
@@ -40,6 +44,99 @@ const maintenanceSchema = z.object({
   message: z.string().max(1000).default(""),
   allowed_ips: z.string().max(1000).optional()
 });
+
+const announcementIconOptions = ["sparkles", "megaphone", "rocket", "warning", "gift", "bell"] as const;
+
+const announcementSchema = z
+  .object({
+    is_enabled: z.boolean(),
+    text: z.string().max(200).default(""),
+    icon: z.string().max(40).optional().nullable(),
+    cta_label: z.string().max(60).optional().nullable(),
+    cta_url: z.string().max(300).optional().nullable(),
+    countdown_target: z.string().max(40).optional().nullable()
+  })
+  .superRefine((payload, ctx) => {
+    const hasLabel = Boolean(payload.cta_label?.trim());
+    const hasUrl = Boolean(payload.cta_url?.trim());
+    if (hasLabel !== hasUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Le texte du bouton et l'URL doivent être définis ensemble.",
+        path: ["cta_label"]
+      });
+    }
+    if (hasUrl) {
+      try {
+        new URL(payload.cta_url?.trim() ?? "");
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "L'URL du bouton est invalide.",
+          path: ["cta_url"]
+        });
+      }
+    }
+    if (payload.is_enabled && !payload.text.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Le texte du bandeau est requis.",
+        path: ["text"]
+      });
+    }
+    if (payload.icon && payload.icon.trim() && !announcementIconOptions.includes(payload.icon.trim() as (typeof announcementIconOptions)[number])) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "L'icône sélectionnée est invalide.",
+        path: ["icon"]
+      });
+    }
+    if (payload.countdown_target?.trim()) {
+      const timestamp = Date.parse(payload.countdown_target.trim());
+      if (Number.isNaN(timestamp)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "La date de compte à rebours est invalide.",
+          path: ["countdown_target"]
+        });
+      }
+    }
+  });
+
+function isValidUrlOrPath(value: string): boolean {
+  if (!value.trim()) return true;
+  if (value.startsWith("/")) return true;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const brandingSchema = z
+  .object({
+    site_title: z.string().max(120).default(""),
+    site_description: z.string().max(500).default(""),
+    logo_url: z.string().max(300).default(""),
+    favicon_url: z.string().max(300).default("")
+  })
+  .superRefine((payload, ctx) => {
+    if (!isValidUrlOrPath(payload.logo_url)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "URL du logo invalide.",
+        path: ["logo_url"]
+      });
+    }
+    if (!isValidUrlOrPath(payload.favicon_url)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "URL du favicon invalide.",
+        path: ["favicon_url"]
+      });
+    }
+  });
 
 const promoteSchema = z
   .object({
@@ -447,6 +544,40 @@ export async function updateMaintenanceSettings(req: Request, res: Response): Pr
     allowed_ips: payload.allowed_ips ?? ""
   });
   res.json({ message: "Paramètres de maintenance mis à jour." });
+}
+
+export async function getAnnouncementSettings(_req: Request, res: Response): Promise<void> {
+  const settings = await getAnnouncementSettingsFromDb();
+  res.json(settings);
+}
+
+export async function updateAnnouncementSettings(req: Request, res: Response): Promise<void> {
+  const payload = announcementSchema.parse(req.body);
+  await updateAnnouncementSettingsInDb({
+    is_enabled: payload.is_enabled,
+    text: payload.text.trim(),
+    icon: payload.icon?.trim() ?? "",
+    cta_label: payload.cta_label?.trim() ?? "",
+    cta_url: payload.cta_url?.trim() ?? "",
+    countdown_target: payload.countdown_target?.trim() ?? ""
+  });
+  res.json({ message: "Bandeau d'information mis à jour." });
+}
+
+export async function getSiteBrandingSettings(_req: Request, res: Response): Promise<void> {
+  const settings = await getSiteBrandingSettingsFromDb();
+  res.json(settings);
+}
+
+export async function updateSiteBrandingSettings(req: Request, res: Response): Promise<void> {
+  const payload = brandingSchema.parse(req.body);
+  await updateSiteBrandingSettingsInDb({
+    site_title: payload.site_title.trim(),
+    site_description: payload.site_description.trim(),
+    logo_url: payload.logo_url.trim(),
+    favicon_url: payload.favicon_url.trim()
+  });
+  res.json({ message: "Identité du site mise à jour." });
 }
 
 export async function disableUserTwoFactor(req: Request, res: Response): Promise<void> {

@@ -83,7 +83,9 @@ export function AdminLayout(): JSX.Element {
       </aside>
 
       <div className="admin-content">
-        <Outlet />
+        <div className="admin-content-inner">
+          <Outlet />
+        </div>
       </div>
     </section>
   );

@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiRequest, MaintenanceSettings } from "../lib/api";
+import { apiRequest, MaintenanceSettings, SiteBrandingSettings } from "../lib/api";
 
 type MaintenanceResponse = {
   maintenance: MaintenanceSettings;
 };
 
-export function MaintenancePage(): JSX.Element {
+type MaintenancePageProps = {
+  branding?: SiteBrandingSettings | null;
+};
+
+export function MaintenancePage({ branding }: MaintenancePageProps): JSX.Element {
   const { t } = useTranslation();
   const [message, setMessage] = useState("");
+  const brandTitle = branding?.site_title?.trim() || "Quokka";
+  const brandLogo = branding?.logo_url?.trim() || "/images/logo/logorond.png";
 
   useEffect(() => {
     async function fetchMaintenanceMessage(): Promise<void> {
@@ -25,8 +31,8 @@ export function MaintenancePage(): JSX.Element {
 
   return (
     <section className="maintenance-page">
-      <a className="maintenance-logo-link" href="/" aria-label="Quokka">
-        <img className="maintenance-logo" src="/images/logo/logorond.png" alt="Quokka" />
+      <a className="maintenance-logo-link" href="/" aria-label={brandTitle}>
+        <img className="maintenance-logo" src={brandLogo} alt={brandTitle} />
       </a>
 
       <article className="maintenance-card">

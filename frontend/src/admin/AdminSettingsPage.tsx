@@ -1,24 +1,70 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { getMaintenanceSettings, updateMaintenanceSettings, MaintenanceSettings } from "../lib/api";
+import {
+  getMaintenanceSettings,
+  updateMaintenanceSettings,
+  getAnnouncementSettings,
+  updateAnnouncementSettings,
+  getSiteBrandingSettings,
+  updateSiteBrandingSettings,
+  MaintenanceSettings,
+  AnnouncementSettings,
+  SiteBrandingSettings
+} from "../lib/api";
 
 export function AdminSettingsPage(): JSX.Element {
   const { token } = useAuth();
   const { showToast } = useToast();
   const [settings, setSettings] = useState<MaintenanceSettings>({ is_enabled: false, message: "", allowed_ips: "" });
+  const [announcement, setAnnouncement] = useState<AnnouncementSettings>({
+    is_enabled: false,
+    text: "",
+    icon: "",
+    cta_label: "",
+    cta_url: "",
+    countdown_target: ""
+  });
+  const [branding, setBranding] = useState<SiteBrandingSettings>({
+    site_title: "",
+    site_description: "",
+    logo_url: "",
+    favicon_url: ""
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [brandingSaving, setBrandingSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [announcementError, setAnnouncementError] = useState<string | null>(null);
+  const [brandingError, setBrandingError] = useState<string | null>(null);
+
+  const iconOptions = [
+    { value: "", label: "Aucune" },
+    { value: "sparkles", label: "✨ Étincelles" },
+    { value: "megaphone", label: "📣 Annonce" },
+    { value: "rocket", label: "🚀 Lancement" },
+    { value: "warning", label: "⚠️ Alerte" },
+    { value: "gift", label: "🎁 Offre" },
+    { value: "bell", label: "🔔 Info" }
+  ];
 
   useEffect(() => {
     async function loadSettings(): Promise<void> {
       if (!token) return;
       setLoading(true);
       setError(null);
+      setAnnouncementError(null);
+      setBrandingError(null);
       try {
-        const result = await getMaintenanceSettings(token);
-        setSettings(result);
+        const [maintenanceResult, announcementResult, brandingResult] = await Promise.all([
+          getMaintenanceSettings(token),
+          getAnnouncementSettings(token),
+          getSiteBrandingSettings(token)
+        ]);
+        setSettings(maintenanceResult);
+        setAnnouncement(announcementResult);
+        setBranding(brandingResult);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Chargement des paramètres impossible.");
       } finally {
@@ -43,13 +89,43 @@ export function AdminSettingsPage(): JSX.Element {
     }
   }
 
+  async function onAnnouncementSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) return;
+    setAnnouncementSaving(true);
+    setAnnouncementError(null);
+    try {
+      await updateAnnouncementSettings(token, announcement);
+      showToast("Bandeau d'information enregistré.");
+    } catch (e) {
+      setAnnouncementError(e instanceof Error ? e.message : "Mise à jour impossible.");
+    } finally {
+      setAnnouncementSaving(false);
+    }
+  }
+
+  async function onBrandingSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) return;
+    setBrandingSaving(true);
+    setBrandingError(null);
+    try {
+      await updateSiteBrandingSettings(token, branding);
+      showToast("Identité du site enregistrée.");
+    } catch (e) {
+      setBrandingError(e instanceof Error ? e.message : "Mise à jour impossible.");
+    } finally {
+      setBrandingSaving(false);
+    }
+  }
+
   if (loading) return <p>Chargement des paramètres...</p>;
 
   return (
     <div className="admin-page">
       <div className="admin-page-head">
         <h2>Paramétrage du site</h2>
-        <p>Page dédiée à la configuration globale, avec gestion du mode maintenance.</p>
+        <p>Page dédiée à la configuration globale, avec maintenance et bandeau d'information.</p>
       </div>
 
       <article className="card">
@@ -81,6 +157,114 @@ export function AdminSettingsPage(): JSX.Element {
           </label>
           <button className="btn" type="submit" disabled={saving}>
             {saving ? "Enregistrement..." : "Enregistrer"}
+          </button>
+        </form>
+      </article>
+
+      <article className="card">
+        <form className="form" onSubmit={onBrandingSubmit}>
+          <h3>Identité du site</h3>
+          {brandingError && <p className="error-text">{brandingError}</p>}
+          <label>
+            Titre du site
+            <input
+              value={branding.site_title}
+              onChange={(event) => setBranding({ ...branding, site_title: event.target.value })}
+              placeholder="Quokka"
+            />
+          </label>
+          <label>
+            Description du site
+            <textarea
+              rows={3}
+              value={branding.site_description}
+              onChange={(event) => setBranding({ ...branding, site_description: event.target.value })}
+              placeholder="Annuaire et classement de serveurs."
+            />
+          </label>
+          <label>
+            URL du logo
+            <input
+              value={branding.logo_url}
+              onChange={(event) => setBranding({ ...branding, logo_url: event.target.value })}
+              placeholder="https://... ou /images/logo.png"
+            />
+          </label>
+          <label>
+            URL du favicon
+            <input
+              value={branding.favicon_url}
+              onChange={(event) => setBranding({ ...branding, favicon_url: event.target.value })}
+              placeholder="https://... ou /images/favicon.png"
+            />
+          </label>
+          <button className="btn" type="submit" disabled={brandingSaving}>
+            {brandingSaving ? "Enregistrement..." : "Enregistrer l'identité"}
+          </button>
+        </form>
+      </article>
+
+      <article className="card">
+        <form className="form" onSubmit={onAnnouncementSubmit}>
+          <h3>Bandeau d'information</h3>
+          {announcementError && <p className="error-text">{announcementError}</p>}
+          <label className="inline-control">
+            <input
+              type="checkbox"
+              checked={announcement.is_enabled}
+              onChange={(event) => setAnnouncement({ ...announcement, is_enabled: event.target.checked })}
+            />
+            Activer le bandeau
+          </label>
+          <label>
+            Texte
+            <textarea
+              rows={3}
+              value={announcement.text}
+              onChange={(event) => setAnnouncement({ ...announcement, text: event.target.value })}
+              placeholder="Ex: Nouvelle version disponible aujourd'hui."
+            />
+          </label>
+          <label>
+            Icône (optionnelle)
+            <select
+              value={announcement.icon}
+              onChange={(event) => setAnnouncement({ ...announcement, icon: event.target.value })}
+            >
+              {iconOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Bouton d'action (optionnel)
+            <input
+              value={announcement.cta_label}
+              onChange={(event) => setAnnouncement({ ...announcement, cta_label: event.target.value })}
+              placeholder="Ex: Découvrir"
+            />
+          </label>
+          <label>
+            Lien du bouton
+            <input
+              type="url"
+              value={announcement.cta_url}
+              onChange={(event) => setAnnouncement({ ...announcement, cta_url: event.target.value })}
+              placeholder="https://..."
+            />
+          </label>
+          <label>
+            Compte à rebours (optionnel)
+            <input
+              type="datetime-local"
+              value={announcement.countdown_target}
+              onChange={(event) => setAnnouncement({ ...announcement, countdown_target: event.target.value })}
+            />
+          </label>
+          <button className="btn" type="submit" disabled={announcementSaving}>
+            {announcementSaving ? "Enregistrement..." : "Enregistrer le bandeau"}
           </button>
         </form>
       </article>

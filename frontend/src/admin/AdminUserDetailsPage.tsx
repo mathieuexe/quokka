@@ -244,6 +244,10 @@ export function AdminUserDetailsPage(): JSX.Element {
     <div className="admin-page">
       <div className="admin-page-head">
         <h2>Fiche utilisateur</h2>
+        <p>
+          {target.pseudo}
+          {target.customer_reference ? ` · ${target.customer_reference}` : ""}
+        </p>
         <p>Vue par sections : compte, serveurs, tickets, abonnements.</p>
       </div>
 

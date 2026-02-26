@@ -41,6 +41,22 @@ export type MaintenanceSettings = {
   allowed_ips: string;
 };
 
+export type AnnouncementSettings = {
+  is_enabled: boolean;
+  text: string;
+  icon: string;
+  cta_label: string;
+  cta_url: string;
+  countdown_target: string;
+};
+
+export type SiteBrandingSettings = {
+  site_title: string;
+  site_description: string;
+  logo_url: string;
+  favicon_url: string;
+};
+
 export async function getMaintenanceSettings(token: string): Promise<MaintenanceSettings> {
   return apiRequest<MaintenanceSettings>("/admin/maintenance", { token });
 }
@@ -54,4 +70,42 @@ export async function updateMaintenanceSettings(
     token,
     body: settings
   });
+}
+
+export async function getAnnouncementSettings(token: string): Promise<AnnouncementSettings> {
+  return apiRequest<AnnouncementSettings>("/admin/announcement", { token });
+}
+
+export async function updateAnnouncementSettings(
+  token: string,
+  settings: AnnouncementSettings
+): Promise<{ message: string }> {
+  return apiRequest("/admin/announcement", {
+    method: "PUT",
+    token,
+    body: settings
+  });
+}
+
+export async function getPublicAnnouncementSettings(): Promise<{ announcement: AnnouncementSettings }> {
+  return apiRequest<{ announcement: AnnouncementSettings }>("/announcement");
+}
+
+export async function getSiteBrandingSettings(token: string): Promise<SiteBrandingSettings> {
+  return apiRequest<SiteBrandingSettings>("/admin/branding", { token });
+}
+
+export async function updateSiteBrandingSettings(
+  token: string,
+  settings: SiteBrandingSettings
+): Promise<{ message: string }> {
+  return apiRequest("/admin/branding", {
+    method: "PUT",
+    token,
+    body: settings
+  });
+}
+
+export async function getPublicBrandingSettings(): Promise<{ branding: SiteBrandingSettings }> {
+  return apiRequest<{ branding: SiteBrandingSettings }>("/branding");
 }
