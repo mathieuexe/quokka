@@ -119,6 +119,8 @@ export function AdminSettingsPage(): JSX.Element {
     }
   }
 
+  const announcementCtaEnabled = Boolean(announcement.cta_label.trim() || announcement.cta_url.trim());
+
   if (loading) return <p>Chargement des paramètres...</p>;
 
   return (
@@ -239,22 +241,41 @@ export function AdminSettingsPage(): JSX.Element {
             </select>
           </label>
           <label>
-            Bouton d'action (optionnel)
-            <input
-              value={announcement.cta_label}
-              onChange={(event) => setAnnouncement({ ...announcement, cta_label: event.target.value })}
-              placeholder="Ex: Découvrir"
-            />
+            Bouton d'action
+            <label className="inline-control" style={{ marginTop: "0.4rem" }}>
+              <input
+                type="checkbox"
+                checked={announcementCtaEnabled}
+                onChange={(event) => {
+                  if (!event.target.checked) {
+                    setAnnouncement({ ...announcement, cta_label: "", cta_url: "" });
+                  }
+                }}
+              />
+              Ajouter un bouton (optionnel)
+            </label>
           </label>
-          <label>
-            Lien du bouton
-            <input
-              type="url"
-              value={announcement.cta_url}
-              onChange={(event) => setAnnouncement({ ...announcement, cta_url: event.target.value })}
-              placeholder="https://..."
-            />
-          </label>
+          {announcementCtaEnabled && (
+            <>
+              <label>
+                Texte du bouton
+                <input
+                  value={announcement.cta_label}
+                  onChange={(event) => setAnnouncement({ ...announcement, cta_label: event.target.value })}
+                  placeholder="Ex: Découvrir"
+                />
+              </label>
+              <label>
+                Lien du bouton
+                <input
+                  type="url"
+                  value={announcement.cta_url}
+                  onChange={(event) => setAnnouncement({ ...announcement, cta_url: event.target.value })}
+                  placeholder="https://..."
+                />
+              </label>
+            </>
+          )}
           <label>
             Compte à rebours (optionnel)
             <input
