@@ -188,15 +188,17 @@ export async function updateAnnouncementSettings(settings: AnnouncementSettings)
   await ensureAnnouncementSchema();
   await db.query(
     `
-      UPDATE announcement_settings
-      SET is_enabled = $1,
-          text = $2,
-          icon = $3,
-          cta_label = $4,
-          cta_url = $5,
-          countdown_target = $6,
-          updated_at = NOW()
-      WHERE id = 1
+      INSERT INTO announcement_settings (id, is_enabled, text, icon, cta_label, cta_url, countdown_target, updated_at)
+      VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (id)
+      DO UPDATE SET
+        is_enabled = EXCLUDED.is_enabled,
+        text = EXCLUDED.text,
+        icon = EXCLUDED.icon,
+        cta_label = EXCLUDED.cta_label,
+        cta_url = EXCLUDED.cta_url,
+        countdown_target = EXCLUDED.countdown_target,
+        updated_at = NOW()
     `,
     [settings.is_enabled, settings.text, settings.icon, settings.cta_label, settings.cta_url, settings.countdown_target]
   );
