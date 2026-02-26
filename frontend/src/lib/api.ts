@@ -1,4 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
+const rawApiUrl = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
+const normalizedApiUrl = rawApiUrl.replace(/\/+$/, "");
+const API_URL = /\/api(\/|$)/.test(normalizedApiUrl) ? normalizedApiUrl : `${normalizedApiUrl}/api`;
 
 export class ApiError extends Error {
   status: number;
