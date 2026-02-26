@@ -569,7 +569,19 @@ export function AdminTicketsPage(): JSX.Element {
                 >
                   <div>
                     <h3>{ticket.reference}</h3>
-                    <p>{ticket.user_pseudo}</p>
+                    <p>
+                      Utilisateur:{" "}
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openUserPreview(ticket.user_id);
+                        }}
+                      >
+                        {ticket.user_pseudo}
+                      </button>
+                    </p>
                     <p>{ticket.category}</p>
                   </div>
                   <div className="tickets-list-meta">
