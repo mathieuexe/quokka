@@ -40,7 +40,6 @@ export function AdminSettingsPage(): JSX.Element {
   const [brandingError, setBrandingError] = useState<string | null>(null);
 
   const iconOptions = [
-    { value: "", label: "Aucune" },
     { value: "sparkles", label: "✨ Étincelles" },
     { value: "megaphone", label: "📣 Annonce" },
     { value: "rocket", label: "🚀 Lancement" },
@@ -48,6 +47,7 @@ export function AdminSettingsPage(): JSX.Element {
     { value: "gift", label: "🎁 Offre" },
     { value: "bell", label: "🔔 Info" }
   ];
+  const defaultAnnouncementIcon = iconOptions[0]?.value ?? "";
 
   useEffect(() => {
     async function loadSettings(): Promise<void> {
@@ -214,7 +214,14 @@ export function AdminSettingsPage(): JSX.Element {
             <input
               type="checkbox"
               checked={announcement.is_enabled}
-              onChange={(event) => setAnnouncement({ ...announcement, is_enabled: event.target.checked })}
+              onChange={(event) => {
+                const isEnabled = event.target.checked;
+                setAnnouncement({
+                  ...announcement,
+                  is_enabled: isEnabled,
+                  icon: isEnabled && !announcement.icon.trim() ? defaultAnnouncementIcon : announcement.icon
+                });
+              }}
             />
             Activer le bandeau
           </label>
@@ -225,13 +232,15 @@ export function AdminSettingsPage(): JSX.Element {
               value={announcement.text}
               onChange={(event) => setAnnouncement({ ...announcement, text: event.target.value })}
               placeholder="Ex: Nouvelle version disponible aujourd'hui."
+              required={announcement.is_enabled}
             />
           </label>
           <label>
-            Icône (optionnelle)
+            Icône
             <select
               value={announcement.icon}
               onChange={(event) => setAnnouncement({ ...announcement, icon: event.target.value })}
+              required={announcement.is_enabled}
             >
               {iconOptions.map((option) => (
                 <option key={option.value} value={option.value}>

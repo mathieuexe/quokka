@@ -57,16 +57,7 @@ const announcementSchema = z
     countdown_target: z.string().max(40).optional().nullable()
   })
   .superRefine((payload, ctx) => {
-    const hasLabel = Boolean(payload.cta_label?.trim());
-    const hasUrl = Boolean(payload.cta_url?.trim());
-    if (hasLabel !== hasUrl) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Le texte du bouton et l'URL doivent être définis ensemble.",
-        path: ["cta_label"]
-      });
-    }
-    if (hasUrl && payload.cta_url && !isValidUrlOrPath(payload.cta_url)) {
+    if (payload.cta_url?.trim() && !isValidUrlOrPath(payload.cta_url)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "L'URL du bouton est invalide.",
@@ -80,7 +71,14 @@ const announcementSchema = z
         path: ["text"]
       });
     }
-    if (payload.icon && payload.icon.trim() && !announcementIconOptions.includes(payload.icon.trim() as (typeof announcementIconOptions)[number])) {
+    if (payload.is_enabled && !payload.icon?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "L'icône du bandeau est requise.",
+        path: ["icon"]
+      });
+    }
+    if (payload.icon?.trim() && !announcementIconOptions.includes(payload.icon.trim() as (typeof announcementIconOptions)[number])) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "L'icône sélectionnée est invalide.",
