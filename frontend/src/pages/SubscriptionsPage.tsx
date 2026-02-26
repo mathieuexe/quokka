@@ -66,7 +66,13 @@ export function SubscriptionsPage(): JSX.Element {
   async function downloadInvoice(orderId: string): Promise<void> {
     if (!token) return;
     try {
-      const rawApiUrl = import.meta.env.VITE_API_URL ?? "https://quokka.gg/api";
+      const envApiUrl = import.meta.env.VITE_API_URL;
+      const rawApiUrl =
+        envApiUrl && envApiUrl.trim()
+          ? envApiUrl
+          : typeof window !== "undefined"
+            ? `${window.location.origin}/api`
+            : "https://quokka.gg/api";
       const normalizedApiUrl = rawApiUrl.replace(/\/+$/, "");
       const apiUrl = /\/api(\/|$)/.test(normalizedApiUrl) ? normalizedApiUrl : `${normalizedApiUrl}/api`;
       const response = await fetch(`${apiUrl}/payments/orders/${orderId}/invoice`, {
