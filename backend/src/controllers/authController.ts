@@ -77,7 +77,7 @@ const resendCodeSchema = z.object({
 });
 
 const discordCallbackSchema = z.object({
-  code: z.string().min(1),
+  code: z.string().min(1).optional(),
   state: z.string().optional()
 });
 
@@ -518,6 +518,15 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
           ? req.query.state
           : undefined
   });
+
+  if (!payload.code) {
+    if (req.method === "GET") {
+      res.redirect("/api/auth/discord");
+      return;
+    }
+    res.status(400).json({ message: "Code Discord manquant." });
+    return;
+  }
 
   if (env.DISCORD_SESSION_SECRET && !verifyDiscordState(env.DISCORD_SESSION_SECRET, payload.state)) {
     res.status(400).json({ message: "Session Discord expirée ou invalide." });
