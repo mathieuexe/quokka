@@ -437,6 +437,7 @@ export default function App(): JSX.Element {
             <Route path="/" element={<HomePage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/auth/discord/callback" element={<DiscordCallbackPage />} />
+            <Route path="/api/auth/discord/callback" element={<DiscordCallbackPage />} />
             <Route path="/auth/discord/success" element={<DiscordSuccess />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/mentions-legales" element={<LegalNoticePage />} />

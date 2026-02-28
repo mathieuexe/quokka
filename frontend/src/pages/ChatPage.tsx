@@ -264,18 +264,20 @@ export function ChatPage(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
+    const loadOnlineUsers = async (): Promise<void> => {
+      try {
+        const data = await apiRequest<OnlineUsersResponse>("/chat/online?window=60&limit=50");
+        if (cancelled) return;
+        setOnlineUsers(data.users);
+      } catch {
+        if (cancelled) return;
+        setOnlineUsers([]);
+      }
+    };
+    void loadOnlineUsers();
     const interval = window.setInterval(() => {
-      void (async () => {
-        try {
-          const data = await apiRequest<OnlineUsersResponse>("/chat/online?window=60&limit=50");
-          if (cancelled) return;
-          setOnlineUsers(data.users);
-        } catch {
-          if (cancelled) return;
-          setOnlineUsers([]);
-        }
-      })();
-    }, 4000);
+      void loadOnlineUsers();
+    }, 2000);
 
     return () => {
       cancelled = true;
@@ -285,18 +287,20 @@ export function ChatPage(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
+    const loadOnlineGuests = async (): Promise<void> => {
+      try {
+        const data = await apiRequest<OnlineGuestsResponse>("/chat/online/guests?window=60&limit=50");
+        if (cancelled) return;
+        setOnlineGuests(data.guests);
+      } catch {
+        if (cancelled) return;
+        setOnlineGuests([]);
+      }
+    };
+    void loadOnlineGuests();
     const interval = window.setInterval(() => {
-      void (async () => {
-        try {
-          const data = await apiRequest<OnlineGuestsResponse>("/chat/online/guests?window=60&limit=50");
-          if (cancelled) return;
-          setOnlineGuests(data.guests);
-        } catch {
-          if (cancelled) return;
-          setOnlineGuests([]);
-        }
-      })();
-    }, 4000);
+      void loadOnlineGuests();
+    }, 2000);
 
     return () => {
       cancelled = true;
