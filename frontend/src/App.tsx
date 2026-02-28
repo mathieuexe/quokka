@@ -100,10 +100,10 @@ function schedulePreload(callback: () => void): void {
     requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
   };
   if (typeof win.requestIdleCallback === "function") {
-    win.requestIdleCallback(callback, { timeout: 2000 });
+    win.requestIdleCallback(callback, { timeout: 800 });
     return;
   }
-  window.setTimeout(callback, 800);
+  window.setTimeout(callback, 300);
 }
 
 function resolveSeo(pathname: string, branding?: SiteBrandingSettings | null): SeoData {

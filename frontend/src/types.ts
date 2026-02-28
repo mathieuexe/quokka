@@ -31,6 +31,7 @@ export type User = {
   customer_reference?: string;
   balance_cents?: number;
   last_balance_update?: string | null;
+  discord_linked?: boolean;
 };
 
 export type Server = {

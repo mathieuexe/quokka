@@ -543,12 +543,12 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
   const discordUserRaw = (await userResponse.json()) as unknown;
   const discordUser = discordUserSchema.parse(discordUserRaw);
   const discordAvatarUrl = getDiscordAvatarUrl(discordUser);
-  const pseudoBase = discordUser.global_name ?? discordUser.username;
-  const pseudo = await generateUniquePseudo(pseudoBase);
-  const email = discordUser.email ?? `discord-${discordUser.id}@users.discord`;
 
   let user = await findUserByDiscordId(discordUser.id);
   if (!user) {
+    const pseudoBase = discordUser.global_name ?? discordUser.username;
+    const pseudo = await generateUniquePseudo(pseudoBase);
+    const email = discordUser.email ?? `discord-${discordUser.id}@users.discord`;
     const passwordHash = await hashPassword(randomBytes(32).toString("hex"));
     user = await createUserFromDiscord({
       pseudo,
@@ -564,54 +564,59 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
       discordProfile: discordUserRaw
     });
 
-    try {
-      await insertAdminNotification({
-        type: "user_registered",
-        priority: 6,
-        title: `Nouvel utilisateur inscrit: ${user.pseudo}`,
-        message: `Email: ${user.email}`,
-        userId: user.id
-      });
-    } catch {}
-
-    try {
-      const isAmongFirst100 = await isUserAmongFirst100(user.id);
-      if (isAmongFirst100) {
-        const badgeId = await getBadgeIdBySlug("100_premiers_utilisateurs");
-        if (badgeId) {
-          await assignBadgeToUser(user.id, badgeId);
+    void (async () => {
+      try {
+        await insertAdminNotification({
+          type: "user_registered",
+          priority: 6,
+          title: `Nouvel utilisateur inscrit: ${user.pseudo}`,
+          message: `Email: ${user.email}`,
+          userId: user.id
+        });
+      } catch {}
+      try {
+        const isAmongFirst100 = await isUserAmongFirst100(user.id);
+        if (isAmongFirst100) {
+          const badgeId = await getBadgeIdBySlug("100_premiers_utilisateurs");
+          if (badgeId) {
+            await assignBadgeToUser(user.id, badgeId);
+          }
         }
+      } catch (error) {
+        console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
       }
-    } catch (error) {
-      console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
-    }
+    })();
   } else {
-    await updateDiscordUserRecord({
-      userId: user.id,
-      discordId: discordUser.id,
-      discordUsername: discordUser.username,
-      discordAvatarUrl,
-      discordEmail: discordUser.email ?? null,
-      discordLocale: discordUser.locale ?? null,
-      discordProfile: discordUserRaw
-    });
-    await updateUserAvatarIfMissing(user.id, discordAvatarUrl);
+    void Promise.all([
+      updateDiscordUserRecord({
+        userId: user.id,
+        discordId: discordUser.id,
+        discordUsername: discordUser.username,
+        discordAvatarUrl,
+        discordEmail: discordUser.email ?? null,
+        discordLocale: discordUser.locale ?? null,
+        discordProfile: discordUserRaw
+      }),
+      updateUserAvatarIfMissing(user.id, discordAvatarUrl)
+    ]);
   }
 
-  await updateLastLogin(user.id);
-  try {
-    const ipTrace = await resolveIpTrace(getRequestIp(req));
-    await insertUserIpEvent({
-      userId: user.id,
-      eventType: "login",
-      ip: ipTrace.ip,
-      provider: ipTrace.provider,
-      country: ipTrace.country,
-      region: ipTrace.region,
-      city: ipTrace.city
-    });
-    await sendLoginAlertEmail({ user, req, ipTrace, language: user.language });
-  } catch {}
+  void updateLastLogin(user.id);
+  void (async () => {
+    try {
+      const ipTrace = await resolveIpTrace(getRequestIp(req));
+      await insertUserIpEvent({
+        userId: user.id,
+        eventType: "login",
+        ip: ipTrace.ip,
+        provider: ipTrace.provider,
+        country: ipTrace.country,
+        region: ipTrace.region,
+        city: ipTrace.city
+      });
+      await sendLoginAlertEmail({ user, req, ipTrace, language: user.language });
+    } catch {}
+  })();
 
   const token = signAccessToken({
     sub: user.id,

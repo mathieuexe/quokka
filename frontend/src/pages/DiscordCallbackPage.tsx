@@ -16,6 +16,7 @@ export function DiscordCallbackPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    void import("./DashboardPage");
     const code = searchParams.get("code");
     const state = searchParams.get("state") ?? undefined;
 

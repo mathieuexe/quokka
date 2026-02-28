@@ -203,6 +203,20 @@ export async function findUserByDiscordId(discordId: string): Promise<DbUser | n
   return result.rows[0] ?? null;
 }
 
+export async function hasDiscordAccount(userId: string): Promise<boolean> {
+  const result = await db.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM users_discord
+        WHERE user_id = $1
+      ) as exists
+    `,
+    [userId]
+  );
+  return result.rows[0]?.exists ?? false;
+}
+
 export async function createUser(params: {
   pseudo: string;
   email: string;

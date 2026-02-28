@@ -338,6 +338,7 @@ export function AdminUserDetailsPage(): JSX.Element {
                   <span className={`status-pill ${target.two_factor_enabled ? "status-paid" : "status-pending"}`}>
                     {target.two_factor_enabled ? "2FA activée" : "2FA désactivée"}
                   </span>
+                  {target.discord_linked && <span className="status-pill status-paid">Compte créé et connecté via Discord</span>}
                 </div>
               </div>
               <div className="admin-user-section">

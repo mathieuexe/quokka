@@ -19,7 +19,8 @@ import {
   updateUserAsAdmin,
   findUserById,
   deleteUser,
-  listUserIpEvents
+  listUserIpEvents,
+  hasDiscordAccount
 } from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
@@ -308,10 +309,12 @@ export async function getAdminUserDetails(req: Request, res: Response): Promise<
     res.status(404).json({ message: "Utilisateur introuvable." });
     return;
   }
+  const discordLinked = await hasDiscordAccount(user.id);
   res.json({
     user: {
       ...user,
-      customer_reference: generateCustomerReference(user.pseudo, user.id)
+      customer_reference: generateCustomerReference(user.pseudo, user.id),
+      discord_linked: discordLinked
     },
     servers,
     availableBadges,
