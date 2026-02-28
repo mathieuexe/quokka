@@ -137,6 +137,15 @@ function normalizePseudo(value: string): string {
   return trimmed.slice(0, 60) || "discord-user";
 }
 
+function getDiscordRedirectUris(): string[] {
+  const candidates = [
+    env.DISCORD_REDIRECT_URI,
+    env.FRONTEND_URL ? `${env.FRONTEND_URL}/api/auth/discord/callback` : undefined,
+    env.FRONTEND_URL ? `${env.FRONTEND_URL}/auth/discord/callback` : undefined
+  ].filter((value): value is string => Boolean(value));
+  return Array.from(new Set(candidates));
+}
+
 async function generateUniquePseudo(base: string): Promise<string> {
   let candidate = normalizePseudo(base);
   const baseValue = candidate;
@@ -470,13 +479,14 @@ export async function startDiscordLogin(_req: Request, res: Response): Promise<v
     res.status(503).json({ message: maintenance.discord_auth_message || "Connexion Discord en maintenance." });
     return;
   }
-  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_REDIRECT_URI) {
+  const redirectUris = getDiscordRedirectUris();
+  if (!env.DISCORD_CLIENT_ID || redirectUris.length === 0) {
     res.status(500).json({ message: "Configuration Discord manquante." });
     return;
   }
   const params = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
-    redirect_uri: env.DISCORD_REDIRECT_URI,
+    redirect_uri: redirectUris[0],
     response_type: "code",
     scope: "identify email"
   });
@@ -514,32 +524,42 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
     return;
   }
 
-  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.DISCORD_REDIRECT_URI) {
+  const redirectUris = getDiscordRedirectUris();
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || redirectUris.length === 0) {
     res.status(500).json({ message: "Configuration Discord manquante." });
     return;
   }
 
-  const tokenParams = new URLSearchParams({
-    client_id: env.DISCORD_CLIENT_ID,
-    client_secret: env.DISCORD_CLIENT_SECRET,
-    grant_type: "authorization_code",
-    code: payload.code,
-    redirect_uri: env.DISCORD_REDIRECT_URI
-  });
+  let tokenData: DiscordTokenResponse | null = null;
+  let lastErrorText: string | null = null;
 
-  const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: tokenParams.toString()
-  });
+  for (const redirectUri of redirectUris) {
+    const tokenParams = new URLSearchParams({
+      client_id: env.DISCORD_CLIENT_ID,
+      client_secret: env.DISCORD_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code: payload.code,
+      redirect_uri: redirectUri
+    });
 
-  if (!tokenResponse.ok) {
-    const errorText = await tokenResponse.text();
-    res.status(401).json({ message: "Échec de la connexion Discord.", error: errorText });
-    return;
+    const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenParams.toString()
+    });
+
+    if (tokenResponse.ok) {
+      tokenData = (await tokenResponse.json()) as DiscordTokenResponse;
+      break;
+    }
+
+    lastErrorText = await tokenResponse.text();
   }
 
-  const tokenData = (await tokenResponse.json()) as DiscordTokenResponse;
+  if (!tokenData) {
+    res.status(401).json({ message: "Échec de la connexion Discord.", error: lastErrorText ?? undefined });
+    return;
+  }
 
   const userResponse = await fetch("https://discord.com/api/users/@me", {
     headers: { Authorization: `Bearer ${tokenData.access_token}` }
