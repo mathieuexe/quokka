@@ -502,7 +502,7 @@ export function DashboardPage(): JSX.Element {
                 </div>
               </div>
             ) : (
-              <p>Aucun compte Discord connecte.</p>
+              <p>Aucun compte Discord connecté.</p>
             )}
           </article>
           <article className="card dashboard-section">
