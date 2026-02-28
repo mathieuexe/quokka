@@ -52,6 +52,8 @@ export function DiscordCallbackPage(): JSX.Element {
             window.location.href = `${API_URL}/auth/discord`;
             return;
           }
+          setError("Code Discord expiré ou invalide. Merci de relancer la connexion.");
+          return;
         }
         setError(err instanceof Error ? err.message : "Connexion Discord impossible.");
       });
@@ -66,7 +68,23 @@ export function DiscordCallbackPage(): JSX.Element {
       <div className="card" style={{ maxWidth: "520px", margin: "3rem auto", textAlign: "center" }}>
         <h1>Connexion Discord</h1>
         <img src="/images/icons/Sandy%20Loading.gif" alt="Chargement en cours" style={{ width: "120px", height: "120px" }} />
-        {error ? <p className="error-text">{error}</p> : <p>Connexion en cours...</p>}
+        {error ? (
+          <>
+            <p className="error-text">{error}</p>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                sessionStorage.removeItem("discord-auth-retry");
+                window.location.href = `${API_URL}/auth/discord`;
+              }}
+            >
+              Relancer la connexion Discord
+            </button>
+          </>
+        ) : (
+          <p>Connexion en cours...</p>
+        )}
       </div>
     </section>
   );
