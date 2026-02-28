@@ -15,6 +15,7 @@ import { userRoutes } from "./routes/userRoutes.js";
 import { chatRoutes } from "./routes/chatRoutes.js";
 import { ticketRoutes } from "./routes/ticketRoutes.js";
 import { blogRoutes } from "./routes/blogRoutes.js";
+import { handleDiscordCallback } from "./controllers/authController.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { maintenanceGuard } from "./middleware/maintenance.js";
 
@@ -42,6 +43,8 @@ app.post("/api/payments/webhook", express.raw({ type: "application/json" }), str
 app.use(express.json({ limit: "1mb" }));
 app.use(maintenanceGuard);
 app.use("/uploads", express.static(join(process.cwd(), "uploads")));
+app.get("/discord/callback", handleDiscordCallback);
+app.post("/discord/callback", handleDiscordCallback);
 
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
