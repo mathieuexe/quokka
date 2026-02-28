@@ -5,6 +5,19 @@ export type Badge = {
   image_url: string;
 };
 
+export type DiscordAccount = {
+  id: string;
+  user_id: string;
+  discord_id: string;
+  username: string;
+  avatar_url: string | null;
+  email: string | null;
+  locale: string | null;
+  profile: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
 export type User = {
   id: string;
   pseudo: string;
@@ -32,6 +45,7 @@ export type User = {
   balance_cents?: number;
   last_balance_update?: string | null;
   discord_linked?: boolean;
+  discord_account?: DiscordAccount | null;
 };
 
 export type Server = {

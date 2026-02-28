@@ -46,6 +46,15 @@ export function DiscordCallbackPage(): JSX.Element {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          const query = new URLSearchParams();
+          query.set("code", code);
+          if (state) {
+            query.set("state", state);
+          }
+          window.location.href = `${API_URL}/auth/discord/callback?${query.toString()}`;
+          return;
+        }
         if (err instanceof ApiError && (err.status === 400 || err.status === 401)) {
           if (!sessionStorage.getItem(retryKey)) {
             sessionStorage.setItem(retryKey, "1");

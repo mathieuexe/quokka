@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { listServersByUser } from "../repositories/serverRepository.js";
 import { listUserSubscriptions } from "../repositories/subscriptionRepository.js";
-import { findUserById, listBadgesByUserId, updateProfile } from "../repositories/userRepository.js";
+import { findUserById, getDiscordAccountByUserId, listBadgesByUserId, updateProfile } from "../repositories/userRepository.js";
 import { ensureMonthlyLikesReset } from "../repositories/voteRepository.js";
 import { toggleTwoFactor } from "../repositories/verificationRepository.js";
 
@@ -53,10 +53,11 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const [servers, subscriptions, badges] = await Promise.all([
+  const [servers, subscriptions, badges, discordAccount] = await Promise.all([
     listServersByUser(userId),
     listUserSubscriptions(userId),
-    listBadgesByUserId(userId)
+    listBadgesByUserId(userId),
+    getDiscordAccountByUserId(userId)
   ]);
 
   res.json({
@@ -81,7 +82,8 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
       snapchat_url: user.snapchat_url,
       tiktok_url: user.tiktok_url,
       badges,
-      role: user.role
+      role: user.role,
+      discord_account: discordAccount
     },
     servers,
     subscriptions

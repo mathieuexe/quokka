@@ -203,6 +203,19 @@ export async function findUserByDiscordId(discordId: string): Promise<DbUser | n
   return result.rows[0] ?? null;
 }
 
+export async function getDiscordAccountByUserId(userId: string): Promise<DiscordUserRecord | null> {
+  const result = await db.query<DiscordUserRecord>(
+    `
+      SELECT id, user_id, discord_id, username, avatar_url, email, locale, profile, created_at, updated_at
+      FROM users_discord
+      WHERE user_id = $1
+      LIMIT 1
+    `,
+    [userId]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function hasDiscordAccount(userId: string): Promise<boolean> {
   const result = await db.query<{ exists: boolean }>(
     `

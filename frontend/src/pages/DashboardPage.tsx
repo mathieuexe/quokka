@@ -84,6 +84,7 @@ export function DashboardPage(): JSX.Element {
   const [promoteStartDateByServer, setPromoteStartDateByServer] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<DashboardSection>("profile");
   const [error, setError] = useState<string | null>(null);
+  const discordAccount = data?.user.discord_account ?? null;
 
   async function loadDashboard(): Promise<void> {
     if (!token) return;
@@ -341,6 +342,9 @@ export function DashboardPage(): JSX.Element {
           <p className="dashboard-subtitle">
             Espace centralise avec sections separees : profil, serveurs, abonnements et parametres.
           </p>
+          <p className="dashboard-muted">
+            Compte Discord : {discordAccount ? `connecte (${discordAccount.username})` : "non connecte"}
+          </p>
         </div>
       </article>
 
@@ -471,6 +475,38 @@ export function DashboardPage(): JSX.Element {
         <div className="dashboard-layout">
           <article className="card dashboard-section">
             <div className="dashboard-section-head">
+              <h2>Connexion Discord</h2>
+              <p>Informations liees au compte Discord connecte.</p>
+            </div>
+            {discordAccount ? (
+              <div className="dashboard-info-grid">
+                <div className="dashboard-info-item">
+                  <span className="dashboard-info-label">Utilisateur</span>
+                  <span>{discordAccount.username}</span>
+                </div>
+                <div className="dashboard-info-item">
+                  <span className="dashboard-info-label">Identifiant</span>
+                  <span>{discordAccount.discord_id}</span>
+                </div>
+                <div className="dashboard-info-item">
+                  <span className="dashboard-info-label">Email</span>
+                  <span>{discordAccount.email ?? "Non renseigne"}</span>
+                </div>
+                <div className="dashboard-info-item">
+                  <span className="dashboard-info-label">Langue</span>
+                  <span>{discordAccount.locale ?? "Non renseignee"}</span>
+                </div>
+                <div className="dashboard-info-item">
+                  <span className="dashboard-info-label">Connexion</span>
+                  <span>{new Date(discordAccount.created_at).toLocaleString("fr-FR")}</span>
+                </div>
+              </div>
+            ) : (
+              <p>Aucun compte Discord connecte.</p>
+            )}
+          </article>
+          <article className="card dashboard-section">
+            <div className="dashboard-section-head">
               <h2>Parametres de securite</h2>
               <p>Gestion de la double authentification et securite de connexion.</p>
             </div>
@@ -485,7 +521,7 @@ export function DashboardPage(): JSX.Element {
             >
               <div style={{ marginBottom: "0.75rem" }}>
                 <strong style={{ color: twoFactorEnabled ? "#166534" : "#92400e" }}>
-                  Double authentification (2FA) : {twoFactorEnabled ? "✅ Activee" : "❌ Desactivee"}
+                  Double authentification (2FA) : {twoFactorEnabled ? "✅ Activée" : "❌ Désactivée"}
                 </strong>
               </div>
               <p style={{ margin: "0 0 1rem 0", fontSize: "0.9rem", color: "#4b5563", lineHeight: "1.5" }}>
