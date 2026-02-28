@@ -4,6 +4,8 @@ export type MaintenanceSettings = {
   is_enabled: boolean;
   message: string;
   allowed_ips: string;
+  discord_auth_enabled: boolean;
+  discord_auth_message: string;
 };
 
 export type AnnouncementSettings = {
@@ -37,18 +39,22 @@ async function ensureMaintenanceSchema(): Promise<void> {
               is_enabled boolean NOT NULL DEFAULT FALSE,
               message text NOT NULL DEFAULT '',
               allowed_ips text NOT NULL DEFAULT '',
+              discord_auth_enabled boolean NOT NULL DEFAULT FALSE,
+              discord_auth_message text NOT NULL DEFAULT '',
               updated_at timestamptz NOT NULL DEFAULT NOW()
             )
           `
         );
         await db.query(
           `
-            INSERT INTO maintenance_settings (id, is_enabled, message, allowed_ips)
-            VALUES (1, FALSE, '', '')
+            INSERT INTO maintenance_settings (id, is_enabled, message, allowed_ips, discord_auth_enabled, discord_auth_message)
+            VALUES (1, FALSE, '', '', FALSE, '')
             ON CONFLICT (id) DO NOTHING
           `
         );
         await db.query("ALTER TABLE maintenance_settings ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT NOW()");
+        await db.query("ALTER TABLE maintenance_settings ADD COLUMN IF NOT EXISTS discord_auth_message text NOT NULL DEFAULT ''");
+        await db.query("ALTER TABLE maintenance_settings ADD COLUMN IF NOT EXISTS discord_auth_enabled boolean NOT NULL DEFAULT FALSE");
         await db.query("ALTER TABLE maintenance_settings ADD COLUMN IF NOT EXISTS allowed_ips text NOT NULL DEFAULT ''");
         await db.query("ALTER TABLE maintenance_settings ADD COLUMN IF NOT EXISTS message text NOT NULL DEFAULT ''");
         await db.query("ALTER TABLE maintenance_settings ADD COLUMN IF NOT EXISTS is_enabled boolean NOT NULL DEFAULT FALSE");
@@ -139,11 +145,21 @@ async function ensureBrandingSchema(): Promise<void> {
 export async function getMaintenanceSettings(): Promise<MaintenanceSettings> {
   try {
     await ensureMaintenanceSchema();
-    const result = await db.query<MaintenanceSettings>("SELECT is_enabled, message, allowed_ips FROM maintenance_settings WHERE id = 1");
-    return result.rows[0] ?? { is_enabled: false, message: "", allowed_ips: "" };
+    const result = await db.query<MaintenanceSettings>(
+      "SELECT is_enabled, message, allowed_ips, discord_auth_enabled, discord_auth_message FROM maintenance_settings WHERE id = 1"
+    );
+    return (
+      result.rows[0] ?? {
+        is_enabled: false,
+        message: "",
+        allowed_ips: "",
+        discord_auth_enabled: false,
+        discord_auth_message: ""
+      }
+    );
   } catch (error) {
     console.error("Maintenance settings load failed:", error);
-    return { is_enabled: false, message: "", allowed_ips: "" };
+    return { is_enabled: false, message: "", allowed_ips: "", discord_auth_enabled: false, discord_auth_message: "" };
   }
 }
 
@@ -155,10 +171,12 @@ export async function updateMaintenanceSettings(settings: MaintenanceSettings): 
       SET is_enabled = $1,
           message = $2,
           allowed_ips = $3,
+          discord_auth_enabled = $4,
+          discord_auth_message = $5,
           updated_at = NOW()
       WHERE id = 1
     `,
-    [settings.is_enabled, settings.message, settings.allowed_ips]
+    [settings.is_enabled, settings.message, settings.allowed_ips, settings.discord_auth_enabled, settings.discord_auth_message]
   );
 }
 

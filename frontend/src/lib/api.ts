@@ -49,6 +49,8 @@ export type MaintenanceSettings = {
   is_enabled: boolean;
   message: string;
   allowed_ips: string;
+  discord_auth_enabled: boolean;
+  discord_auth_message: string;
 };
 
 export type AnnouncementSettings = {

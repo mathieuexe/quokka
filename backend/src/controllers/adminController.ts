@@ -53,7 +53,9 @@ import { countUnreadNotifications, listAdminNotifications, markNotificationsRead
 const maintenanceSchema = z.object({
   is_enabled: z.boolean(),
   message: z.string().max(1000).default(""),
-  allowed_ips: z.string().max(1000).optional()
+  allowed_ips: z.string().max(1000).optional(),
+  discord_auth_enabled: z.boolean(),
+  discord_auth_message: z.string().max(1000).default("")
 });
 
 const announcementIconOptions = ["sparkles", "megaphone", "rocket", "warning", "gift", "bell"] as const;
@@ -582,7 +584,8 @@ export async function updateMaintenanceSettings(req: Request, res: Response): Pr
   const payload = maintenanceSchema.parse(req.body);
   await updateMaintenanceSettingsInDb({
     ...payload,
-    allowed_ips: payload.allowed_ips ?? ""
+    allowed_ips: payload.allowed_ips ?? "",
+    discord_auth_message: payload.discord_auth_message ?? ""
   });
   res.json({ message: "Paramètres de maintenance mis à jour." });
 }

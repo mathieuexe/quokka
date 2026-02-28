@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiRequest } from "../lib/api";
+import { ApiError, API_URL, apiRequest } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import type { User } from "../types";
 
@@ -16,11 +16,17 @@ export function DiscordCallbackPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const retryKey = "discord-auth-retry";
     void import("./DashboardPage");
     const code = searchParams.get("code");
     const state = searchParams.get("state") ?? undefined;
 
     if (!code) {
+      if (!sessionStorage.getItem(retryKey)) {
+        sessionStorage.setItem(retryKey, "1");
+        window.location.href = `${API_URL}/auth/discord`;
+        return;
+      }
       setError("Code Discord manquant.");
       return;
     }
@@ -34,11 +40,19 @@ export function DiscordCallbackPage(): JSX.Element {
     })
       .then((data) => {
         if (cancelled) return;
+        sessionStorage.removeItem(retryKey);
         login(data.token, data.user);
         navigate("/dashboard");
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        if (err instanceof ApiError && (err.status === 400 || err.status === 401)) {
+          if (!sessionStorage.getItem(retryKey)) {
+            sessionStorage.setItem(retryKey, "1");
+            window.location.href = `${API_URL}/auth/discord`;
+            return;
+          }
+        }
         setError(err instanceof Error ? err.message : "Connexion Discord impossible.");
       });
 
@@ -51,6 +65,7 @@ export function DiscordCallbackPage(): JSX.Element {
     <section className="page narrow">
       <div className="card" style={{ maxWidth: "520px", margin: "3rem auto", textAlign: "center" }}>
         <h1>Connexion Discord</h1>
+        <img src="/images/icons/Sandy%20Loading.gif" alt="Chargement en cours" style={{ width: "120px", height: "120px" }} />
         {error ? <p className="error-text">{error}</p> : <p>Connexion en cours...</p>}
       </div>
     </section>

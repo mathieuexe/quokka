@@ -40,6 +40,7 @@ import {
 } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
 import { insertAdminNotification } from "../repositories/notificationRepository.js";
+import { getMaintenanceSettings } from "../repositories/systemRepository.js";
 
 
 const registerSchema = z
@@ -464,6 +465,11 @@ export async function resendCode(req: Request, res: Response): Promise<void> {
 }
 
 export async function startDiscordLogin(_req: Request, res: Response): Promise<void> {
+  const maintenance = await getMaintenanceSettings();
+  if (maintenance.discord_auth_enabled) {
+    res.status(503).json({ message: maintenance.discord_auth_message || "Connexion Discord en maintenance." });
+    return;
+  }
   if (!env.DISCORD_CLIENT_ID || !env.DISCORD_REDIRECT_URI) {
     res.status(500).json({ message: "Configuration Discord manquante." });
     return;
@@ -483,6 +489,11 @@ export async function startDiscordLogin(_req: Request, res: Response): Promise<v
 }
 
 export async function handleDiscordCallback(req: Request, res: Response): Promise<void> {
+  const maintenance = await getMaintenanceSettings();
+  if (maintenance.discord_auth_enabled) {
+    res.status(503).json({ message: maintenance.discord_auth_message || "Connexion Discord en maintenance." });
+    return;
+  }
   const payload = discordCallbackSchema.parse({
     code:
       typeof req.body?.code === "string"

@@ -17,7 +17,13 @@ import {
 export function AdminSettingsPage(): JSX.Element {
   const { token, logout } = useAuth();
   const { showToast } = useToast();
-  const [settings, setSettings] = useState<MaintenanceSettings>({ is_enabled: false, message: "", allowed_ips: "" });
+  const [settings, setSettings] = useState<MaintenanceSettings>({
+    is_enabled: false,
+    message: "",
+    allowed_ips: "",
+    discord_auth_enabled: false,
+    discord_auth_message: ""
+  });
   const [announcement, setAnnouncement] = useState<AnnouncementSettings>({
     is_enabled: false,
     text: "",
@@ -211,6 +217,22 @@ export function AdminSettingsPage(): JSX.Element {
               rows={2}
               value={settings.allowed_ips}
               onChange={(event) => setSettings({ ...settings, allowed_ips: event.target.value })}
+            />
+          </label>
+          <label className="inline-control">
+            <input
+              type="checkbox"
+              checked={settings.discord_auth_enabled}
+              onChange={(event) => setSettings({ ...settings, discord_auth_enabled: event.target.checked })}
+            />
+            Mettre la connexion Discord en maintenance
+          </label>
+          <label>
+            Message de maintenance pour la connexion Discord
+            <textarea
+              rows={3}
+              value={settings.discord_auth_message}
+              onChange={(event) => setSettings({ ...settings, discord_auth_message: event.target.value })}
             />
           </label>
           <button className="btn" type="submit" disabled={saving}>
