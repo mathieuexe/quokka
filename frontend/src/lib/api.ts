@@ -6,7 +6,7 @@ const rawApiUrl =
       ? `${window.location.origin}/api`
       : "https://quokka.gg/api";
 const normalizedApiUrl = rawApiUrl.replace(/\/+$/, "");
-const API_URL = /\/api(\/|$)/.test(normalizedApiUrl) ? normalizedApiUrl : `${normalizedApiUrl}/api`;
+export const API_URL = /\/api(\/|$)/.test(normalizedApiUrl) ? normalizedApiUrl : `${normalizedApiUrl}/api`;
 
 export class ApiError extends Error {
   status: number;

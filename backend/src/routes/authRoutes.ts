@@ -9,4 +9,5 @@ authRoutes.post("/verify-email", verifyEmail);
 authRoutes.post("/verify-2fa", verify2FA);
 authRoutes.post("/resend-code", resendCode);
 authRoutes.get("/discord", startDiscordLogin);
+authRoutes.post("/discord/callback", handleDiscordCallback);
 authRoutes.get("/discord/callback", handleDiscordCallback);

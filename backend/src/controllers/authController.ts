@@ -483,8 +483,20 @@ export async function startDiscordLogin(_req: Request, res: Response): Promise<v
 }
 
 export async function handleDiscordCallback(req: Request, res: Response): Promise<void> {
-  // ✅ Lecture depuis req.query (GET) au lieu de req.body (POST)
-  const payload = discordCallbackSchema.parse(req.query);
+  const payload = discordCallbackSchema.parse({
+    code:
+      typeof req.body?.code === "string"
+        ? req.body.code
+        : typeof req.query.code === "string"
+          ? req.query.code
+          : undefined,
+    state:
+      typeof req.body?.state === "string"
+        ? req.body.state
+        : typeof req.query.state === "string"
+          ? req.query.state
+          : undefined
+  });
 
   if (env.DISCORD_SESSION_SECRET && !verifyDiscordState(env.DISCORD_SESSION_SECRET, payload.state)) {
     res.status(400).json({ message: "Session Discord expirée ou invalide." });
@@ -607,7 +619,11 @@ export async function handleDiscordCallback(req: Request, res: Response): Promis
     role: user.role
   });
 
-  // ✅ Redirection vers le frontend avec le token en paramètre
+  if (req.method === "POST") {
+    res.json({ token, user });
+    return;
+  }
+
   const frontendUrl = env.FRONTEND_URL ?? "https://quokka.gg";
   res.redirect(`${frontendUrl}/auth/discord/success?token=${token}`);
 }

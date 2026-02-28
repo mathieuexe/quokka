@@ -119,6 +119,7 @@ a {
   position: relative;
   overflow: hidden;
   white-space: nowrap;
+  display: block;
 }
 
 .site-header-announcement-marquee-track {
@@ -126,6 +127,7 @@ a {
   align-items: center;
   gap: 2rem;
   white-space: nowrap;
+  width: max-content;
   animation: announcement-marquee 32s linear infinite;
 }
 
@@ -223,10 +225,10 @@ a {
 
 @keyframes announcement-marquee {
   from {
-    transform: translateX(100%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(-100%);
+    transform: translateX(-50%);
   }
 }
 
