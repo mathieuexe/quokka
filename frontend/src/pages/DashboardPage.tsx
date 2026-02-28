@@ -476,7 +476,7 @@ export function DashboardPage(): JSX.Element {
           <article className="card dashboard-section">
             <div className="dashboard-section-head">
               <h2>Connexion Discord</h2>
-              <p>Informations liees au compte Discord connecte.</p>
+              <p>Informations liées au compte Discord connecté.</p>
             </div>
             {discordAccount ? (
               <div className="dashboard-info-grid">
