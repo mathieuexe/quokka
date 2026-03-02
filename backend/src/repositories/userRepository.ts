@@ -103,7 +103,11 @@ let userIpSchemaReady: Promise<void> | null = null;
 async function ensureUserIpSchema(): Promise<void> {
   if (!userIpSchemaReady) {
     userIpSchemaReady = (async () => {
-      await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+      try {
+        await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+      } catch (error) {
+        console.error("pgcrypto extension unavailable:", error instanceof Error ? error.message : error);
+      }
       await db.query(
         `
           CREATE TABLE IF NOT EXISTS user_ip_events (

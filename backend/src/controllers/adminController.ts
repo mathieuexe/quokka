@@ -118,6 +118,7 @@ const announcementSchema = z
   });
 
 const FAKE_DATA_MARKER = "[FAKE_DATA]";
+const COMMUNITY_SLUGS = new Set(["discord", "stoat"]);
 
 function isValidUrlOrPath(value: string): boolean {
   if (!value.trim()) return true;
@@ -683,31 +684,10 @@ export async function disableUserTwoFactor(req: Request, res: Response): Promise
 }
 
 export async function createFakeData(req: Request, res: Response): Promise<void> {
-  const payload = fakeDataSchema.parse(req.body);
-  const createdUsers: string[] = [];
-  for (let index = 0; index < payload.usersCount; index += 1) {
-    const seed = randomBytes(4).toString("hex");
-    const pseudo = `Fake_${seed}`;
-    const email = `fake_${seed}@example.com`;
-    const passwordHash = await hashPassword(randomBytes(18).toString("hex"));
-    const user = await createUserWithInternalNote({
-      pseudo,
-      email,
-      passwordHash,
-      internalNote: FAKE_DATA_MARKER,
-      language: "fr"
-    });
-    createdUsers.push(user.id);
-  }
-
-  let serverOwners = createdUsers;
-  if (payload.serversCount > 0) {
-    const category = await getCategoryById(payload.categoryId ?? "");
-    if (!category) {
-      res.status(404).json({ message: "Catégorie introuvable." });
-      return;
-    }
-    if (serverOwners.length === 0) {
+  try {
+    const payload = fakeDataSchema.parse(req.body);
+    const createdUsers: string[] = [];
+    for (let index = 0; index < payload.usersCount; index += 1) {
       const seed = randomBytes(4).toString("hex");
       const pseudo = `Fake_${seed}`;
       const email = `fake_${seed}@example.com`;
@@ -719,38 +699,74 @@ export async function createFakeData(req: Request, res: Response): Promise<void>
         internalNote: FAKE_DATA_MARKER,
         language: "fr"
       });
-      serverOwners = [user.id];
+      createdUsers.push(user.id);
     }
 
-    const baseTitle = payload.serverTitle?.trim() ?? "";
-    const baseDescription = payload.serverDescription?.trim() ?? "";
-    const maxDescriptionLength = 5000 - FAKE_DATA_MARKER.length - 2;
-    const safeDescription = baseDescription.slice(0, Math.max(0, maxDescriptionLength));
-    const description = `${safeDescription}\n\n${FAKE_DATA_MARKER}`;
-    const bannerUrl = payload.serverImageUrl?.trim() || undefined;
+    let serverOwners = createdUsers;
+    if (payload.serversCount > 0) {
+      const category = await getCategoryById(payload.categoryId ?? "");
+      if (!category) {
+        res.status(404).json({ message: "Catégorie introuvable." });
+        return;
+      }
+      if (serverOwners.length === 0) {
+        const seed = randomBytes(4).toString("hex");
+        const pseudo = `Fake_${seed}`;
+        const email = `fake_${seed}@example.com`;
+        const passwordHash = await hashPassword(randomBytes(18).toString("hex"));
+        const user = await createUserWithInternalNote({
+          pseudo,
+          email,
+          passwordHash,
+          internalNote: FAKE_DATA_MARKER,
+          language: "fr"
+        });
+        serverOwners = [user.id];
+      }
 
-    for (let index = 0; index < payload.serversCount; index += 1) {
-      const suffix = payload.serversCount > 1 ? ` ${index + 1}` : "";
-      const trimmedTitle = baseTitle.slice(0, Math.max(0, 120 - suffix.length));
-      const name = `${trimmedTitle}${suffix}`.trim();
-      const ownerId = serverOwners[index % serverOwners.length];
-      await createServer({
-        userId: ownerId,
-        categoryId: category.id,
-        name,
-        description,
-        website: undefined,
-        countryCode: "FR",
-        ip: undefined,
-        port: undefined,
-        inviteLink: undefined,
-        bannerUrl,
-        isPublic: true
-      });
+      const baseTitle = payload.serverTitle?.trim() ?? "";
+      const baseDescription = payload.serverDescription?.trim() ?? "";
+      const maxDescriptionLength = 5000 - FAKE_DATA_MARKER.length - 2;
+      const safeDescription = baseDescription.slice(0, Math.max(0, maxDescriptionLength));
+      const description = `${safeDescription}\n\n${FAKE_DATA_MARKER}`;
+      const bannerUrl = payload.serverImageUrl?.trim() || undefined;
+      const isCommunityCategory = COMMUNITY_SLUGS.has(category.slug);
+      const inviteLink = isCommunityCategory ? "https://discord.gg/fake" : undefined;
+      const ip = isCommunityCategory ? undefined : "127.0.0.1";
+      const port = isCommunityCategory ? undefined : 25565;
+
+      for (let index = 0; index < payload.serversCount; index += 1) {
+        const suffix = payload.serversCount > 1 ? ` ${index + 1}` : "";
+        const trimmedTitle = baseTitle.slice(0, Math.max(0, 120 - suffix.length));
+        const name = `${trimmedTitle}${suffix}`.trim();
+        const ownerId = serverOwners[index % serverOwners.length];
+        await createServer({
+          userId: ownerId,
+          categoryId: category.id,
+          name,
+          description,
+          website: undefined,
+          countryCode: "FR",
+          ip,
+          port,
+          inviteLink,
+          bannerUrl,
+          isPublic: true
+        });
+      }
     }
+
+    res.json({ message: "Données fictives créées.", usersCreated: createdUsers.length, serversCreated: payload.serversCount });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ message: "Données invalides.", issues: error.issues });
+      return;
+    }
+    res.status(500).json({
+      message: "Création des données fictives impossible.",
+      error: process.env.NODE_ENV === "development" && error instanceof Error ? error.message : undefined
+    });
   }
-
-  res.json({ message: "Données fictives créées.", usersCreated: createdUsers.length, serversCreated: payload.serversCount });
 }
 
 export async function deleteFakeData(_req: Request, res: Response): Promise<void> {

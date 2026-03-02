@@ -6,7 +6,11 @@ let chatSchemaReady: Promise<void> | null = null;
 async function ensureChatSchema(): Promise<void> {
   if (!chatSchemaReady) {
     chatSchemaReady = (async () => {
-      await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+      try {
+        await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+      } catch (error) {
+        console.error("pgcrypto extension unavailable:", error instanceof Error ? error.message : error);
+      }
       await db.query(
         `
           CREATE TABLE IF NOT EXISTS chat_settings (
