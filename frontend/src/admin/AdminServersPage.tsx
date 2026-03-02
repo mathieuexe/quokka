@@ -227,6 +227,7 @@ export function AdminServersPage(): JSX.Element {
                 <span className={`status-pill ${server.verified ? "status-paid" : "status-failed"}`}>
                   {server.verified ? "Vérifié" : "Non vérifié"}
                 </span>
+                {server.is_fake && <span className="status-pill status-failed">FAKE SERVER</span>}
                 <button className="btn btn-ghost" type="button" onClick={() => void setVisibility(server.id, !server.is_visible)}>
                   {server.is_visible ? "Retirer de la liste" : "Rendre visible"}
                 </button>

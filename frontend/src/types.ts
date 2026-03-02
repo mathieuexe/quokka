@@ -77,6 +77,7 @@ export type Server = {
   likes: number;
   visits: number;
   clicks: number;
+  is_fake?: boolean;
 };
 
 export type Category = {

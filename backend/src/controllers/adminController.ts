@@ -7,8 +7,11 @@ import {
   listServersByUser,
   deleteServer,
   deleteServersByDescriptionMarker,
+  deleteServersByFakeFlag,
   getCategoryById,
   getServerOwner,
+  listFakeServerIdsByServerIds,
+  markServerAsFake,
   setServerHidden,
   setServerVisibility,
   updateServerAsAdmin
@@ -333,7 +336,12 @@ export async function getAdminUsers(_req: Request, res: Response): Promise<void>
 export async function getAdminServers(req: Request, res: Response): Promise<void> {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const servers = await listServersByPriority(search);
-  res.json({ servers });
+  const fakeIds = await listFakeServerIdsByServerIds(servers.map((server) => server.id));
+  const serversWithFakeFlag = servers.map((server) => ({
+    ...server,
+    is_fake: fakeIds.has(server.id)
+  }));
+  res.json({ servers: serversWithFakeFlag });
 }
 
 export async function getAdminSubscriptions(_req: Request, res: Response): Promise<void> {
@@ -364,13 +372,18 @@ export async function getAdminUserDetails(req: Request, res: Response): Promise<
     return;
   }
   const discordLinked = await hasDiscordAccount(user.id);
+  const fakeServerIds = await listFakeServerIdsByServerIds(servers.map((server) => server.id));
+  const serversWithFakeFlag = servers.map((server) => ({
+    ...server,
+    is_fake: fakeServerIds.has(server.id)
+  }));
   res.json({
     user: {
       ...user,
       customer_reference: generateCustomerReference(user.pseudo, user.id),
       discord_linked: discordLinked
     },
-    servers,
+    servers: serversWithFakeFlag,
     availableBadges,
     subscriptions,
     emailEvents,
@@ -726,9 +739,8 @@ export async function createFakeData(req: Request, res: Response): Promise<void>
 
       const baseTitle = payload.serverTitle?.trim() ?? "";
       const baseDescription = payload.serverDescription?.trim() ?? "";
-      const maxDescriptionLength = 5000 - FAKE_DATA_MARKER.length - 2;
-      const safeDescription = baseDescription.slice(0, Math.max(0, maxDescriptionLength));
-      const description = `${safeDescription}\n\n${FAKE_DATA_MARKER}`;
+      const safeDescription = baseDescription.slice(0, 5000);
+      const description = safeDescription;
       const bannerUrl = payload.serverImageUrl?.trim() || undefined;
       const isCommunityCategory = COMMUNITY_SLUGS.has(category.slug);
       const inviteLink = isCommunityCategory ? "https://discord.gg/fake" : undefined;
@@ -740,7 +752,7 @@ export async function createFakeData(req: Request, res: Response): Promise<void>
         const trimmedTitle = baseTitle.slice(0, Math.max(0, 120 - suffix.length));
         const name = `${trimmedTitle}${suffix}`.trim();
         const ownerId = serverOwners[index % serverOwners.length];
-        await createServer({
+        const server = await createServer({
           userId: ownerId,
           categoryId: category.id,
           name,
@@ -753,6 +765,7 @@ export async function createFakeData(req: Request, res: Response): Promise<void>
           bannerUrl,
           isPublic: true
         });
+        await markServerAsFake(server.id);
       }
     }
 
@@ -770,7 +783,9 @@ export async function createFakeData(req: Request, res: Response): Promise<void>
 }
 
 export async function deleteFakeData(_req: Request, res: Response): Promise<void> {
-  const deletedServers = await deleteServersByDescriptionMarker(FAKE_DATA_MARKER);
+  const deletedByFlag = await deleteServersByFakeFlag();
+  const deletedByMarker = await deleteServersByDescriptionMarker(FAKE_DATA_MARKER);
+  const deletedServers = deletedByFlag + deletedByMarker;
   const deletedUsers = await deleteUsersByInternalNote(FAKE_DATA_MARKER);
   res.json({ message: "Données fictives supprimées.", deletedServers, deletedUsers });
 }

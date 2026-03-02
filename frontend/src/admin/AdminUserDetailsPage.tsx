@@ -86,6 +86,7 @@ export function AdminUserDetailsPage(): JSX.Element {
   const [ticketsError, setTicketsError] = useState<string | null>(null);
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const isFakeAccount = Boolean(details?.user?.internal_note?.includes("[FAKE_DATA]"));
 
   const loadDetails = useCallback(async (): Promise<void> => {
     if (!token || !userId) return;
@@ -325,6 +326,7 @@ export function AdminUserDetailsPage(): JSX.Element {
                 <span className="tag">Rôle : {target.role}</span>
                 <span className="tag">Langue : {(target.language ?? "fr").toUpperCase()}</span>
                 {target.customer_reference && <span className="tag">Réf client : {target.customer_reference}</span>}
+                {isFakeAccount && <span className="status-pill status-failed">FAKE ACCOUNT</span>}
               </div>
             </div>
 
@@ -617,6 +619,7 @@ export function AdminUserDetailsPage(): JSX.Element {
                     <span className={`status-pill ${server.is_visible ? "status-paid" : "status-failed"}`}>
                       {server.is_visible ? "Visible" : "Masqué"}
                     </span>
+                    {server.is_fake && <span className="status-pill status-failed">FAKE SERVER</span>}
                     <Link className="btn btn-ghost" to={`/servers/${server.id}`}>
                       Ouvrir la fiche serveur
                     </Link>

@@ -31,6 +31,30 @@ export type ServerRecord = {
   clicks: number;
 };
 
+let serverFlagsReady: Promise<void> | null = null;
+
+async function ensureServerFlagsSchema(): Promise<void> {
+  if (!serverFlagsReady) {
+    serverFlagsReady = (async () => {
+      try {
+        await db.query(
+          `
+            CREATE TABLE IF NOT EXISTS server_flags (
+              server_id uuid PRIMARY KEY REFERENCES servers(id) ON DELETE CASCADE,
+              is_fake boolean NOT NULL DEFAULT FALSE,
+              created_at timestamptz NOT NULL DEFAULT NOW()
+            )
+          `
+        );
+        await db.query("CREATE INDEX IF NOT EXISTS idx_server_flags_is_fake ON server_flags(is_fake)");
+      } catch (error) {
+        console.error("Server flags schema init failed:", error);
+      }
+    })();
+  }
+  await serverFlagsReady;
+}
+
 const BASE_SERVER_QUERY = `
   WITH server_refs AS (
     SELECT
@@ -200,6 +224,49 @@ export async function createServer(input: {
   const serverId = result.rows[0].id;
   await db.query("INSERT INTO stats (server_id) VALUES ($1) ON CONFLICT (server_id) DO NOTHING", [serverId]);
   return { id: serverId };
+}
+
+export async function markServerAsFake(serverId: string): Promise<void> {
+  await ensureServerFlagsSchema();
+  await db.query(
+    `
+      INSERT INTO server_flags (server_id, is_fake)
+      VALUES ($1, TRUE)
+      ON CONFLICT (server_id)
+      DO UPDATE SET is_fake = TRUE
+    `,
+    [serverId]
+  );
+}
+
+export async function listFakeServerIdsByServerIds(serverIds: string[]): Promise<Set<string>> {
+  if (serverIds.length === 0) return new Set();
+  await ensureServerFlagsSchema();
+  const result = await db.query<{ server_id: string }>(
+    `
+      SELECT server_id
+      FROM server_flags
+      WHERE is_fake = TRUE
+        AND server_id = ANY($1::uuid[])
+    `,
+    [serverIds]
+  );
+  return new Set(result.rows.map((row) => row.server_id));
+}
+
+export async function deleteServersByFakeFlag(): Promise<number> {
+  await ensureServerFlagsSchema();
+  const result = await db.query(
+    `
+      DELETE FROM servers
+      WHERE id IN (
+        SELECT server_id
+        FROM server_flags
+        WHERE is_fake = TRUE
+      )
+    `
+  );
+  return result.rowCount ?? 0;
 }
 
 export async function listCategories(): Promise<Array<{ id: string; slug: string; label: string; image_url: string }>> {
