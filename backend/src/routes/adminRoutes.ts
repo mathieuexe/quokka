@@ -25,7 +25,9 @@ import {
   removeAdminUser,
   sendAdminMail,
   creditAdminUserBalance,
-  debitAdminUserBalance
+  debitAdminUserBalance,
+  createFakeData,
+  deleteFakeData
 } from "../controllers/adminController.js";
 import {
   deleteAdminBlogCategory,
@@ -78,6 +80,8 @@ adminRoutes.patch("/servers/hide", hideServer);
 adminRoutes.patch("/servers/visible", makeServerVisible);
 adminRoutes.post("/users/resend-code", resendVerificationCode);
 adminRoutes.post("/users/send-mail", sendAdminMail);
+adminRoutes.post("/fakes", createFakeData);
+adminRoutes.delete("/fakes", deleteFakeData);
 adminRoutes.get("/notifications", getAdminNotifications);
 adminRoutes.post("/notifications/read", markAdminNotificationsRead);
 adminRoutes.get("/blog/categories", getAdminBlogCategories);

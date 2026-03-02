@@ -320,6 +320,11 @@ export async function deleteServer(serverId: string): Promise<void> {
   await db.query("DELETE FROM servers WHERE id = $1", [serverId]);
 }
 
+export async function deleteServersByDescriptionMarker(marker: string): Promise<number> {
+  const result = await db.query("DELETE FROM servers WHERE description LIKE $1", [`%${marker}%`]);
+  return result.rowCount ?? 0;
+}
+
 export async function updateServerAsAdmin(
   serverId: string,
   input: {

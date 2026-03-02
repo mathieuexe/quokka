@@ -8,11 +8,15 @@ import {
   updateAnnouncementSettings,
   getSiteBrandingSettings,
   updateSiteBrandingSettings,
+  apiRequest,
   ApiError,
   MaintenanceSettings,
   AnnouncementSettings,
   SiteBrandingSettings
 } from "../lib/api";
+import type { Category } from "../types";
+
+type CategoriesResponse = { categories: Category[] };
 
 export function AdminSettingsPage(): JSX.Element {
   const { token, logout } = useAuth();
@@ -38,6 +42,16 @@ export function AdminSettingsPage(): JSX.Element {
     logo_url: "",
     favicon_url: ""
   });
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [fakeUsersCount, setFakeUsersCount] = useState(5);
+  const [fakeServersCount, setFakeServersCount] = useState(3);
+  const [fakeServerTitle, setFakeServerTitle] = useState("Serveur de test");
+  const [fakeServerDescription, setFakeServerDescription] = useState("Description de test pour remplir l'annuaire.");
+  const [fakeServerImageUrl, setFakeServerImageUrl] = useState("");
+  const [fakeCategoryId, setFakeCategoryId] = useState("");
+  const [fakeSaving, setFakeSaving] = useState(false);
+  const [fakeDeleting, setFakeDeleting] = useState(false);
+  const [fakeError, setFakeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
@@ -94,6 +108,22 @@ export function AdminSettingsPage(): JSX.Element {
     }
     void loadSettings();
   }, [token]);
+
+  useEffect(() => {
+    async function loadCategories(): Promise<void> {
+      setFakeError(null);
+      try {
+        const result = await apiRequest<CategoriesResponse>("/categories");
+        setCategories(result.categories);
+        if (!fakeCategoryId && result.categories.length > 0) {
+          setFakeCategoryId(result.categories[0].id);
+        }
+      } catch (e) {
+        setFakeError(e instanceof Error ? e.message : "Chargement des catégories impossible.");
+      }
+    }
+    void loadCategories();
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -178,6 +208,65 @@ export function AdminSettingsPage(): JSX.Element {
       }
     } finally {
       setBrandingSaving(false);
+    }
+  }
+
+  async function onFakeSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) return;
+    setFakeSaving(true);
+    setFakeError(null);
+    try {
+      await apiRequest("/admin/fakes", {
+        method: "POST",
+        token,
+        body: {
+          usersCount: fakeUsersCount,
+          serversCount: fakeServersCount,
+          serverTitle: fakeServerTitle,
+          serverDescription: fakeServerDescription,
+          serverImageUrl: fakeServerImageUrl,
+          categoryId: fakeCategoryId || undefined
+        }
+      });
+      showToast("Données fictives créées.");
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        showToast("Session expirée. Merci de vous reconnecter.");
+        setFakeError("Authentification requise.");
+      } else if (e instanceof ApiError && typeof e.data === "object" && e.data !== null && "issues" in e.data) {
+        const issues = (e.data as { issues?: { message?: string }[] }).issues ?? [];
+        setFakeError(issues.map((issue) => issue.message).filter(Boolean).join(" • ") || "Données invalides.");
+      } else if (e instanceof ApiError && e.status === 404) {
+        setFakeError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
+      } else {
+        setFakeError(e instanceof Error ? e.message : "Création impossible.");
+      }
+    } finally {
+      setFakeSaving(false);
+    }
+  }
+
+  async function onDeleteFake(): Promise<void> {
+    if (!token) return;
+    setFakeDeleting(true);
+    setFakeError(null);
+    try {
+      await apiRequest("/admin/fakes", { method: "DELETE", token });
+      showToast("Données fictives supprimées.");
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        showToast("Session expirée. Merci de vous reconnecter.");
+        setFakeError("Authentification requise.");
+      } else if (e instanceof ApiError && e.status === 404) {
+        setFakeError("Endpoint API introuvable. Vérifiez VITE_API_URL.");
+      } else {
+        setFakeError(e instanceof Error ? e.message : "Suppression impossible.");
+      }
+    } finally {
+      setFakeDeleting(false);
     }
   }
 
@@ -374,6 +463,82 @@ export function AdminSettingsPage(): JSX.Element {
           <button className="btn" type="submit" disabled={announcementSaving}>
             {announcementSaving ? "Enregistrement..." : "Enregistrer le bandeau"}
           </button>
+        </form>
+      </article>
+
+      <article className="card">
+        <form className="form" onSubmit={onFakeSubmit}>
+          <h3>Données fictives</h3>
+          {fakeError && <p className="error-text">{fakeError}</p>}
+          <div className="form-grid">
+            <label>
+              Nombre d'utilisateurs
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={fakeUsersCount}
+                onChange={(event) => setFakeUsersCount(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Nombre de serveurs
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={fakeServersCount}
+                onChange={(event) => setFakeServersCount(Number(event.target.value))}
+              />
+            </label>
+          </div>
+          <label>
+            Titre du serveur
+            <input
+              value={fakeServerTitle}
+              onChange={(event) => setFakeServerTitle(event.target.value)}
+              placeholder="Serveur de test"
+            />
+          </label>
+          <label>
+            Description du serveur
+            <textarea
+              rows={3}
+              value={fakeServerDescription}
+              onChange={(event) => setFakeServerDescription(event.target.value)}
+              placeholder="Description de test"
+            />
+          </label>
+          <label>
+            Image du serveur (URL)
+            <input
+              value={fakeServerImageUrl}
+              onChange={(event) => setFakeServerImageUrl(event.target.value)}
+              placeholder="https://..."
+            />
+          </label>
+          <label>
+            Catégorie
+            <select
+              value={fakeCategoryId}
+              onChange={(event) => setFakeCategoryId(event.target.value)}
+              disabled={categories.length === 0}
+            >
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={fakeSaving}>
+              {fakeSaving ? "Création..." : "Créer les fakes"}
+            </button>
+            <button className="btn btn-outline" type="button" onClick={onDeleteFake} disabled={fakeDeleting}>
+              {fakeDeleting ? "Suppression..." : "Supprimer les fakes"}
+            </button>
+          </div>
         </form>
       </article>
     </div>

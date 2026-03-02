@@ -248,6 +248,25 @@ export async function createUser(params: {
   return result.rows[0];
 }
 
+export async function createUserWithInternalNote(params: {
+  pseudo: string;
+  email: string;
+  passwordHash: string;
+  language?: string;
+  internalNote: string;
+}): Promise<DbUser> {
+  const result = await db.query<DbUser>(
+    `
+      INSERT INTO users (pseudo, email, password_hash, language, internal_note)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `,
+    [params.pseudo, params.email, params.passwordHash, params.language || "fr", params.internalNote]
+  );
+
+  return result.rows[0];
+}
+
 export async function createUserFromDiscord(params: {
   pseudo: string;
   email: string;
@@ -460,6 +479,20 @@ export async function listUsers(): Promise<AdminUserRecord[]> {
   }));
 }
 
+export async function listUserIdsByInternalNote(note: string, limit: number = 200): Promise<string[]> {
+  const result = await db.query<{ id: string }>(
+    `
+      SELECT id
+      FROM users
+      WHERE internal_note = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `,
+    [note, limit]
+  );
+  return result.rows.map((row) => row.id);
+}
+
 export async function updateLastLogin(userId: string): Promise<void> {
   await db.query("UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1", [userId]);
 }
@@ -594,6 +627,11 @@ export async function setUserBadgesAsAdmin(userId: string, badgeIds: string[]): 
 
 export async function deleteUser(userId: string): Promise<void> {
   await db.query("DELETE FROM users WHERE id = $1", [userId]);
+}
+
+export async function deleteUsersByInternalNote(note: string): Promise<number> {
+  const result = await db.query("DELETE FROM users WHERE internal_note = $1", [note]);
+  return result.rowCount ?? 0;
 }
 
 export async function isUserAmongFirst100(userId: string): Promise<boolean> {

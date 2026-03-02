@@ -1,9 +1,13 @@
 import type { Request, Response } from "express";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 import {
+  createServer,
   listServersByPriority,
   listServersByUser,
   deleteServer,
+  deleteServersByDescriptionMarker,
+  getCategoryById,
   getServerOwner,
   setServerHidden,
   setServerVisibility,
@@ -11,8 +15,10 @@ import {
 } from "../repositories/serverRepository.js";
 import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
 import {
+  createUserWithInternalNote,
   creditUserBalance,
   debitUserBalanceIfEnough,
+  deleteUsersByInternalNote,
   listAvailableBadges,
   listUsers,
   setUserBadgesAsAdmin,
@@ -40,6 +46,7 @@ import {
   generateAdminMailTemplate
 } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
+import { hashPassword } from "../utils/password.js";
 import {
   updateMaintenanceSettings as updateMaintenanceSettingsInDb,
   getMaintenanceSettings as getMaintenanceSettingsFromDb,
@@ -109,6 +116,8 @@ const announcementSchema = z
       }
     }
   });
+
+const FAKE_DATA_MARKER = "[FAKE_DATA]";
 
 function isValidUrlOrPath(value: string): boolean {
   if (!value.trim()) return true;
@@ -201,6 +210,48 @@ const updateServerSchema = z.object({
   isVisible: z.boolean(),
   verified: z.boolean()
 });
+
+const fakeDataSchema = z
+  .object({
+    usersCount: z.coerce.number().int().min(0).max(100).default(0),
+    serversCount: z.coerce.number().int().min(0).max(100).default(0),
+    serverTitle: z.string().min(2).max(120).optional(),
+    serverDescription: z.string().min(10).max(5000).optional(),
+    serverImageUrl: z.string().url().optional().or(z.literal("")),
+    categoryId: z.string().uuid().optional()
+  })
+  .superRefine((payload, ctx) => {
+    if (payload.usersCount === 0 && payload.serversCount === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Indiquez un nombre d'utilisateurs ou de serveurs à générer.",
+        path: ["usersCount"]
+      });
+    }
+    if (payload.serversCount > 0) {
+      if (!payload.serverTitle?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Le titre du serveur est requis.",
+          path: ["serverTitle"]
+        });
+      }
+      if (!payload.serverDescription?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "La description du serveur est requise.",
+          path: ["serverDescription"]
+        });
+      }
+      if (!payload.categoryId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "La catégorie est requise.",
+          path: ["categoryId"]
+        });
+      }
+    }
+  });
 
 const deleteSubscriptionSchema = z.object({
   subscriptionId: z.string().uuid()
@@ -629,4 +680,81 @@ export async function disableUserTwoFactor(req: Request, res: Response): Promise
   await toggleTwoFactor(params.userId, false);
   await deleteTwoFactorCodesForUser(params.userId);
   res.json({ message: "Double authentification désactivée pour l'utilisateur.", two_factor_enabled: false });
+}
+
+export async function createFakeData(req: Request, res: Response): Promise<void> {
+  const payload = fakeDataSchema.parse(req.body);
+  const createdUsers: string[] = [];
+  for (let index = 0; index < payload.usersCount; index += 1) {
+    const seed = randomBytes(4).toString("hex");
+    const pseudo = `Fake_${seed}`;
+    const email = `fake_${seed}@example.com`;
+    const passwordHash = await hashPassword(randomBytes(18).toString("hex"));
+    const user = await createUserWithInternalNote({
+      pseudo,
+      email,
+      passwordHash,
+      internalNote: FAKE_DATA_MARKER,
+      language: "fr"
+    });
+    createdUsers.push(user.id);
+  }
+
+  let serverOwners = createdUsers;
+  if (payload.serversCount > 0) {
+    const category = await getCategoryById(payload.categoryId ?? "");
+    if (!category) {
+      res.status(404).json({ message: "Catégorie introuvable." });
+      return;
+    }
+    if (serverOwners.length === 0) {
+      const seed = randomBytes(4).toString("hex");
+      const pseudo = `Fake_${seed}`;
+      const email = `fake_${seed}@example.com`;
+      const passwordHash = await hashPassword(randomBytes(18).toString("hex"));
+      const user = await createUserWithInternalNote({
+        pseudo,
+        email,
+        passwordHash,
+        internalNote: FAKE_DATA_MARKER,
+        language: "fr"
+      });
+      serverOwners = [user.id];
+    }
+
+    const baseTitle = payload.serverTitle?.trim() ?? "";
+    const baseDescription = payload.serverDescription?.trim() ?? "";
+    const maxDescriptionLength = 5000 - FAKE_DATA_MARKER.length - 2;
+    const safeDescription = baseDescription.slice(0, Math.max(0, maxDescriptionLength));
+    const description = `${safeDescription}\n\n${FAKE_DATA_MARKER}`;
+    const bannerUrl = payload.serverImageUrl?.trim() || undefined;
+
+    for (let index = 0; index < payload.serversCount; index += 1) {
+      const suffix = payload.serversCount > 1 ? ` ${index + 1}` : "";
+      const trimmedTitle = baseTitle.slice(0, Math.max(0, 120 - suffix.length));
+      const name = `${trimmedTitle}${suffix}`.trim();
+      const ownerId = serverOwners[index % serverOwners.length];
+      await createServer({
+        userId: ownerId,
+        categoryId: category.id,
+        name,
+        description,
+        website: undefined,
+        countryCode: "FR",
+        ip: undefined,
+        port: undefined,
+        inviteLink: undefined,
+        bannerUrl,
+        isPublic: true
+      });
+    }
+  }
+
+  res.json({ message: "Données fictives créées.", usersCreated: createdUsers.length, serversCreated: payload.serversCount });
+}
+
+export async function deleteFakeData(_req: Request, res: Response): Promise<void> {
+  const deletedServers = await deleteServersByDescriptionMarker(FAKE_DATA_MARKER);
+  const deletedUsers = await deleteUsersByInternalNote(FAKE_DATA_MARKER);
+  res.json({ message: "Données fictives supprimées.", deletedServers, deletedUsers });
 }
