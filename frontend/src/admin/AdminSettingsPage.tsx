@@ -113,7 +113,7 @@ export function AdminSettingsPage(): JSX.Element {
     async function loadCategories(): Promise<void> {
       setFakeError(null);
       try {
-        const result = await apiRequest<CategoriesResponse>("/categories");
+        const result = await apiRequest<CategoriesResponse>("/servers/categories");
         setCategories(result.categories);
         if (!fakeCategoryId && result.categories.length > 0) {
           setFakeCategoryId(result.categories[0].id);
