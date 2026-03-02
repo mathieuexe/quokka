@@ -21,7 +21,10 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string().optional().default(""),
   DISCORD_REDIRECT_URI: z.string().optional().default(""),
   DISCORD_SESSION_SECRET: z.string().optional().default(""),
-  IPINFO_TOKEN: z.string().optional().default("")
+  IPINFO_TOKEN: z.string().optional().default(""),
+  PG_POOL_MAX: z.coerce.number().int().positive().optional(),
+  PG_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  PG_POOL_CONN_TIMEOUT_MS: z.coerce.number().int().positive().optional()
 });
 
 export const env = envSchema.parse(process.env);

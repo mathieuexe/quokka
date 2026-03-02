@@ -19,7 +19,10 @@ export function MaintenancePage({ branding }: MaintenancePageProps): JSX.Element
   useEffect(() => {
     async function fetchMaintenanceMessage(): Promise<void> {
       try {
-        const data = await apiRequest<MaintenanceResponse>("/maintenance");
+        const data = await apiRequest<MaintenanceResponse>("/maintenance", {
+          cacheTtlMs: 60 * 1000,
+          cacheKey: "public:maintenance"
+        });
         setMessage(data.maintenance.message);
       } catch (error) {
         // Fallback message

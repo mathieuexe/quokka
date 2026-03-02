@@ -1,4 +1,5 @@
 import "express-async-errors";
+import compression from "compression";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -39,10 +40,11 @@ app.use(cors({
   credentials: true
 }));
 
+app.use(compression());
 app.post("/api/payments/webhook", express.raw({ type: "application/json" }), stripeWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(maintenanceGuard);
-app.use("/uploads", express.static(join(process.cwd(), "uploads")));
+app.use("/uploads", express.static(join(process.cwd(), "uploads"), { maxAge: "7d", immutable: true }));
 app.get("/discord/callback", handleDiscordCallback);
 app.post("/discord/callback", handleDiscordCallback);
 

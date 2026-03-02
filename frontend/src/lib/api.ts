@@ -23,13 +23,70 @@ type RequestOptions = {
   method?: string;
   body?: unknown;
   token?: string | null;
+  cacheTtlMs?: number;
+  cacheKey?: string;
 };
 
+type CacheEntry<T> = {
+  expiresAt: number;
+  data: T;
+};
+
+const memoryCache = new Map<string, CacheEntry<unknown>>();
+const cachePrefix = "quokka:api:";
+
+function readCachedValue<T>(key: string): T | null {
+  const now = Date.now();
+  const entry = memoryCache.get(key);
+  if (entry) {
+    if (entry.expiresAt > now) {
+      return entry.data as T;
+    }
+    memoryCache.delete(key);
+  }
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${cachePrefix}${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CacheEntry<T>;
+    if (parsed.expiresAt > now) {
+      memoryCache.set(key, parsed);
+      return parsed.data;
+    }
+    window.sessionStorage.removeItem(`${cachePrefix}${key}`);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function writeCachedValue<T>(key: string, ttlMs: number, value: T): void {
+  const entry: CacheEntry<T> = {
+    expiresAt: Date.now() + ttlMs,
+    data: value
+  };
+  memoryCache.set(key, entry);
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(`${cachePrefix}${key}`, JSON.stringify(entry));
+  } catch {
+    return;
+  }
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? "GET";
+  const cacheKey = options.cacheTtlMs && method === "GET" ? options.cacheKey ?? `${method}:${path}` : undefined;
+  if (cacheKey) {
+    const cached = readCachedValue<T>(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+  }
   const isFormData = options.body instanceof FormData;
   const body = options.body === undefined ? undefined : isFormData ? options.body : JSON.stringify(options.body);
   const response = await fetch(`${API_URL}${path}`, {
-    method: options.method ?? "GET",
+    method,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json; charset=utf-8" }),
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
@@ -42,6 +99,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError(data.message ?? "Erreur API", response.status, data);
   }
 
+  if (cacheKey && options.cacheTtlMs) {
+    writeCachedValue(cacheKey, options.cacheTtlMs, data as T);
+  }
   return data as T;
 }
 
@@ -100,7 +160,10 @@ export async function updateAnnouncementSettings(
 }
 
 export async function getPublicAnnouncementSettings(): Promise<{ announcement: AnnouncementSettings }> {
-  return apiRequest<{ announcement: AnnouncementSettings }>("/announcement");
+  return apiRequest<{ announcement: AnnouncementSettings }>("/announcement", {
+    cacheTtlMs: 5 * 60 * 1000,
+    cacheKey: "public:announcement"
+  });
 }
 
 export async function getSiteBrandingSettings(token: string): Promise<SiteBrandingSettings> {
@@ -119,5 +182,8 @@ export async function updateSiteBrandingSettings(
 }
 
 export async function getPublicBrandingSettings(): Promise<{ branding: SiteBrandingSettings }> {
-  return apiRequest<{ branding: SiteBrandingSettings }>("/branding");
+  return apiRequest<{ branding: SiteBrandingSettings }>("/branding", {
+    cacheTtlMs: 5 * 60 * 1000,
+    cacheKey: "public:branding"
+  });
 }

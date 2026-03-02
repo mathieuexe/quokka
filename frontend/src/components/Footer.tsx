@@ -53,13 +53,13 @@ export function Footer(): JSX.Element {
           </div>
           <div className="footer-socials">
             <a href="https://stt.gg/G2PMQnWx" target="_blank" rel="noreferrer" aria-label="Stoat">
-              <img src="/images/icons/stoat-circle.png" alt="Stoat" />
+              <img src="/images/icons/stoat-circle.png" alt="Stoat" loading="lazy" />
             </a>
             <a href="https://bsky.app/profile/quokka.gg" target="_blank" rel="noreferrer" aria-label="Bluesky">
-              <img src="/images/icons/bluesky-circle.png" alt="Bluesky" />
+              <img src="/images/icons/bluesky-circle.png" alt="Bluesky" loading="lazy" />
             </a>
             <a href="https://github.com/mathieuexe/quokka" target="_blank" rel="noreferrer" aria-label="Github">
-              <img src="/images/icons/github-circle.png" alt="Github" />
+              <img src="/images/icons/github-circle.png" alt="Github" loading="lazy" />
             </a>
           </div>
         </div>
