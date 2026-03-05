@@ -176,6 +176,7 @@ export function DashboardPage(): JSX.Element {
         method: "PATCH",
         token,
         body: {
+          token,
           pseudo,
           bio,
           avatarUrl,

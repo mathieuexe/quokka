@@ -102,8 +102,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     }
   }
   const isFormData = options.body instanceof FormData;
-  const body = options.body === undefined ? undefined : isFormData ? options.body : JSON.stringify(options.body);
   const token = typeof options.token === "string" && options.token.trim() ? options.token.trim() : readStoredToken();
+  const normalizedMethod = method.toUpperCase();
+  const canAttachTokenInBody = normalizedMethod !== "GET" && normalizedMethod !== "HEAD";
+  const rawBody =
+    token &&
+    canAttachTokenInBody &&
+    !isFormData &&
+    options.body &&
+    typeof options.body === "object" &&
+    !Array.isArray(options.body)
+      ? { ...(options.body as Record<string, unknown>), token }
+      : options.body;
+  const body = rawBody === undefined ? undefined : isFormData ? (rawBody as FormData) : JSON.stringify(rawBody);
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
