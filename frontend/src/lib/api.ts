@@ -32,8 +32,26 @@ type CacheEntry<T> = {
   data: T;
 };
 
+type StoredAuth = {
+  token?: string | null;
+};
+
 const memoryCache = new Map<string, CacheEntry<unknown>>();
 const cachePrefix = "quokka:api:";
+
+function readStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("quokka_auth");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredAuth;
+    if (!parsed?.token || typeof parsed.token !== "string") return null;
+    const normalized = parsed.token.trim();
+    return normalized.length > 0 ? normalized : null;
+  } catch {
+    return null;
+  }
+}
 
 function readCachedValue<T>(key: string): T | null {
   const now = Date.now();
@@ -85,11 +103,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
   const isFormData = options.body instanceof FormData;
   const body = options.body === undefined ? undefined : isFormData ? options.body : JSON.stringify(options.body);
+  const token = typeof options.token === "string" && options.token.trim() ? options.token.trim() : readStoredToken();
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json; charset=utf-8" }),
-      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
     body: body as BodyInit | undefined
   });

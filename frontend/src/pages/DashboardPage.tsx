@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { apiRequest } from "../lib/api";
+import { ApiError, apiRequest } from "../lib/api";
 import type { Category, Server, User } from "../types";
 
 type Subscription = {
@@ -47,7 +47,7 @@ function formatAmountEur(amount: number): string {
 }
 
 export function DashboardPage(): JSX.Element {
-  const { token, isAuthenticated, updateUser } = useAuth();
+  const { token, isAuthenticated, updateUser, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -141,6 +141,11 @@ export function DashboardPage(): JSX.Element {
         return next;
       });
     } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        setError("Session expirée. Merci de vous reconnecter.");
+        return;
+      }
       setError(e instanceof Error ? e.message : "Impossible de charger le dashboard.");
     }
   }
@@ -188,6 +193,12 @@ export function DashboardPage(): JSX.Element {
       showToast("Profil mis à jour.");
       await loadDashboard();
     } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout();
+        setError("Session expirée. Merci de vous reconnecter.");
+        navigate("/login");
+        return;
+      }
       setError(e instanceof Error ? e.message : "Mise à jour impossible.");
     }
   }
