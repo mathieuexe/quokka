@@ -178,17 +178,21 @@ export async function postChatMessage(req: Request, res: Response): Promise<void
 }
 
 export async function postChatPresence(req: Request, res: Response): Promise<void> {
-  const userId = req.user?.sub;
-  const payload = presenceSchema.parse(req.body ?? {});
-  if (userId) {
-    await upsertChatPresence(userId);
-    res.status(204).send();
-    return;
-  }
-  if (payload.guestPseudo) {
-    await upsertGuestPresence(payload.guestPseudo);
-    res.status(204).send();
-    return;
+  try {
+    const userId = req.user?.sub;
+    const payload = presenceSchema.parse(req.body ?? {});
+    if (userId) {
+      await upsertChatPresence(userId);
+      res.status(204).send();
+      return;
+    }
+    if (payload.guestPseudo) {
+      await upsertGuestPresence(payload.guestPseudo);
+      res.status(204).send();
+      return;
+    }
+  } catch (error) {
+    console.error("chat presence error:", error instanceof Error ? error.message : error);
   }
   res.status(204).send();
 }

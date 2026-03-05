@@ -101,11 +101,28 @@ export type UserIpEvent = {
 
 let userIpSchemaReady: Promise<void> | null = null;
 let pseudoCooldownSchemaReady: Promise<void> | null = null;
+let pseudoCooldownSchemaAvailable = true;
+
+function getPgErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  if (!("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
 
 export async function ensureUserPseudoCooldownSchema(): Promise<void> {
   if (!pseudoCooldownSchemaReady) {
     pseudoCooldownSchemaReady = (async () => {
-      await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS pseudo_last_changed_at timestamptz");
+      try {
+        await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS pseudo_last_changed_at timestamptz");
+        pseudoCooldownSchemaAvailable = true;
+      } catch (error) {
+        pseudoCooldownSchemaAvailable = false;
+        console.error(
+          "pseudo_last_changed_at unavailable:",
+          error instanceof Error ? error.message : error
+        );
+      }
     })();
   }
   await pseudoCooldownSchemaReady;
@@ -410,14 +427,63 @@ export async function updateProfile(
   }
 ): Promise<void> {
   await ensureUserPseudoCooldownSchema();
+  const values = [
+    userId,
+    input.pseudo,
+    input.bio,
+    input.language,
+    input.avatarUrl ?? null,
+    input.discordUrl ?? null,
+    input.xUrl ?? null,
+    input.blueskyUrl ?? null,
+    input.stoatUrl ?? null,
+    input.youtubeUrl ?? null,
+    input.twitchUrl ?? null,
+    input.kickUrl ?? null,
+    input.snapchatUrl ?? null,
+    input.tiktokUrl ?? null
+  ];
+
+  if (pseudoCooldownSchemaAvailable) {
+    try {
+      await db.query(
+        `
+          UPDATE users
+          SET pseudo = $2,
+              pseudo_last_changed_at = CASE
+                WHEN $2 IS DISTINCT FROM pseudo THEN NOW()
+                ELSE pseudo_last_changed_at
+              END,
+              bio = $3,
+              language = COALESCE($4, language),
+              avatar_url = $5,
+              discord_url = $6,
+              x_url = $7,
+              bluesky_url = $8,
+              stoat_url = $9,
+              youtube_url = $10,
+              twitch_url = $11,
+              kick_url = $12,
+              snapchat_url = $13,
+              tiktok_url = $14,
+              updated_at = NOW()
+          WHERE id = $1
+        `,
+        values
+      );
+      return;
+    } catch (error) {
+      if (getPgErrorCode(error) !== "42703") {
+        throw error;
+      }
+      pseudoCooldownSchemaAvailable = false;
+    }
+  }
+
   await db.query(
     `
       UPDATE users
       SET pseudo = $2,
-          pseudo_last_changed_at = CASE
-            WHEN $2 IS DISTINCT FROM pseudo THEN NOW()
-            ELSE pseudo_last_changed_at
-          END,
           bio = $3,
           language = COALESCE($4, language),
           avatar_url = $5,
@@ -433,22 +499,7 @@ export async function updateProfile(
           updated_at = NOW()
       WHERE id = $1
     `,
-    [
-      userId,
-      input.pseudo,
-      input.bio,
-      input.language,
-      input.avatarUrl ?? null,
-      input.discordUrl ?? null,
-      input.xUrl ?? null,
-      input.blueskyUrl ?? null,
-      input.stoatUrl ?? null,
-      input.youtubeUrl ?? null,
-      input.twitchUrl ?? null,
-      input.kickUrl ?? null,
-      input.snapchatUrl ?? null,
-      input.tiktokUrl ?? null
-    ]
+    values
   );
 }
 
