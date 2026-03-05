@@ -108,7 +108,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     method,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json; charset=utf-8" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...(token ? { Authorization: `Bearer ${token}`, "x-access-token": token } : {})
     },
     body: body as BodyInit | undefined
   });

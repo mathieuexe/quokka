@@ -16,6 +16,48 @@ function normalizeForwardedFor(value: string | undefined): string | null {
   return parts.length ? parts[0] : null;
 }
 
+function readBearerToken(value: string | undefined): string | null {
+  if (!value?.startsWith("Bearer ")) return null;
+  const token = value.slice("Bearer ".length).trim();
+  return token.length > 0 ? token : null;
+}
+
+function readHeaderToken(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") {
+    const token = value.trim();
+    return token.length > 0 ? token : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const token = item.trim();
+      if (token.length > 0) return token;
+    }
+  }
+  return null;
+}
+
+function readBodyToken(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  if (!("token" in body)) return null;
+  const token = (body as { token?: unknown }).token;
+  if (typeof token !== "string") return null;
+  const normalized = token.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function extractAccessToken(req: Request): string | null {
+  const bearerToken = readBearerToken(req.headers.authorization);
+  if (bearerToken) return bearerToken;
+
+  const headerToken = readHeaderToken(req.headers["x-access-token"]);
+  if (headerToken) return headerToken;
+
+  const queryToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  if (queryToken.length > 0) return queryToken;
+
+  return readBodyToken(req.body);
+}
+
 export function getRequestIp(req: Request): string | null {
   const forwarded = typeof req.headers["x-forwarded-for"] === "string" ? req.headers["x-forwarded-for"] : undefined;
   const realIp = typeof req.headers["x-real-ip"] === "string" ? req.headers["x-real-ip"] : undefined;
@@ -48,13 +90,11 @@ export async function resolveIpTrace(ip: string | null): Promise<IpTrace> {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const token = extractAccessToken(req);
+  if (!token) {
     res.status(401).json({ message: "Authentification requise." });
     return;
   }
-
-  const token = header.slice("Bearer ".length);
   try {
     req.user = verifyAccessToken(token);
     next();
@@ -64,13 +104,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const token = extractAccessToken(req);
+  if (!token) {
     next();
     return;
   }
-
-  const token = header.slice("Bearer ".length);
   try {
     req.user = verifyAccessToken(token);
   } catch {
