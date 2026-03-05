@@ -480,8 +480,13 @@ export async function makeServerVisible(req: Request, res: Response): Promise<vo
 
 export async function updateAdminUser(req: Request, res: Response): Promise<void> {
   const payload = updateUserSchema.parse(req.body);
+  const normalizedPseudo = payload.pseudo.trim();
+  if (normalizedPseudo.length < 2) {
+    res.status(400).json({ message: "Le pseudo doit contenir au moins 2 caractères." });
+    return;
+  }
   await updateUserAsAdmin(payload.userId, {
-    pseudo: payload.pseudo,
+    pseudo: normalizedPseudo,
     email: payload.email,
     bio: payload.bio,
     internalNote: payload.internalNote,

@@ -53,6 +53,7 @@ export function DashboardPage(): JSX.Element {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [pseudo, setPseudo] = useState("");
+  const [pseudoNextChangeAt, setPseudoNextChangeAt] = useState<string | null>(null);
   const [bio, setBio] = useState("");
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
   const [toggling2FA, setToggling2FA] = useState(false);
@@ -96,6 +97,7 @@ export function DashboardPage(): JSX.Element {
       setData(result);
       setCategories(categoriesResult.categories);
       setPseudo(result.user.pseudo);
+      setPseudoNextChangeAt(result.user.pseudo_next_change_at ?? null);
       setBio(result.user.bio ?? "");
       setTwoFactorEnabled(result.user.two_factor_enabled ?? true);
       setAvatarUrl(result.user.avatar_url ?? "");
@@ -189,6 +191,15 @@ export function DashboardPage(): JSX.Element {
       setError(e instanceof Error ? e.message : "Mise à jour impossible.");
     }
   }
+
+  const pseudoLocked = Boolean(pseudoNextChangeAt);
+  const pseudoChangeDateLabel = pseudoNextChangeAt
+    ? new Date(pseudoNextChangeAt).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      })
+    : null;
 
   async function onToggle2FA(enabled: boolean): Promise<void> {
     if (!token) return;
@@ -405,8 +416,13 @@ export function DashboardPage(): JSX.Element {
               </div>
               <label>
                 Pseudo
-                <input value={pseudo} onChange={(event) => setPseudo(event.target.value)} required />
+                <input value={pseudo} onChange={(event) => setPseudo(event.target.value)} required disabled={pseudoLocked} />
               </label>
+              {pseudoLocked ? (
+                <p className="dashboard-muted">Vous pourrez modifier votre pseudo à nouveau à partir du {pseudoChangeDateLabel}.</p>
+              ) : (
+                <p className="dashboard-muted">Vous pouvez changer votre pseudo une fois tous les 60 jours.</p>
+              )}
               <label>
                 Bio
                 <textarea value={bio} onChange={(event) => setBio(event.target.value)} rows={5} />

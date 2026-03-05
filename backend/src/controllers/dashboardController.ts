@@ -2,7 +2,13 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { listServersByUser } from "../repositories/serverRepository.js";
 import { listUserSubscriptions } from "../repositories/subscriptionRepository.js";
-import { findUserById, getDiscordAccountByUserId, listBadgesByUserId, updateProfile } from "../repositories/userRepository.js";
+import {
+  ensureUserPseudoCooldownSchema,
+  findUserById,
+  getDiscordAccountByUserId,
+  listBadgesByUserId,
+  updateProfile
+} from "../repositories/userRepository.js";
 import { ensureMonthlyLikesReset } from "../repositories/voteRepository.js";
 import { toggleTwoFactor } from "../repositories/verificationRepository.js";
 
@@ -39,6 +45,19 @@ function isImgurAvatarUrl(url: string): boolean {
   }
 }
 
+const PSEUDO_CHANGE_COOLDOWN_DAYS = 60;
+const PSEUDO_CHANGE_COOLDOWN_MS = PSEUDO_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+function getPseudoNextChangeAt(lastChangedAt: string | null | undefined): string | null {
+  if (!lastChangedAt) return null;
+  const lastChanged = new Date(lastChangedAt);
+  const timestamp = lastChanged.getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  const nextAllowedAt = new Date(timestamp + PSEUDO_CHANGE_COOLDOWN_MS);
+  if (nextAllowedAt.getTime() <= Date.now()) return null;
+  return nextAllowedAt.toISOString();
+}
+
 export async function getDashboard(req: Request, res: Response): Promise<void> {
   const userId = req.user?.sub;
   if (!userId) {
@@ -47,6 +66,7 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
   }
 
   await ensureMonthlyLikesReset();
+  await ensureUserPseudoCooldownSchema();
   const user = await findUserById(userId);
   if (!user) {
     res.status(404).json({ message: "Utilisateur introuvable." });
@@ -81,6 +101,8 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
       kick_url: user.kick_url,
       snapchat_url: user.snapchat_url,
       tiktok_url: user.tiktok_url,
+      pseudo_last_changed_at: user.pseudo_last_changed_at,
+      pseudo_next_change_at: getPseudoNextChangeAt(user.pseudo_last_changed_at),
       badges,
       role: user.role,
       discord_account: discordAccount
@@ -98,6 +120,29 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
   }
 
   const payload = updateProfileSchema.parse(req.body);
+  const normalizedPseudo = payload.pseudo.trim();
+  if (normalizedPseudo.length < 2) {
+    res.status(400).json({ message: "Le pseudo doit contenir au moins 2 caractères." });
+    return;
+  }
+
+  await ensureUserPseudoCooldownSchema();
+  const currentUser = await findUserById(userId);
+  if (!currentUser) {
+    res.status(404).json({ message: "Utilisateur introuvable." });
+    return;
+  }
+
+  const pseudoChanged = normalizedPseudo !== currentUser.pseudo;
+  const nextPseudoChangeAt = getPseudoNextChangeAt(currentUser.pseudo_last_changed_at);
+  if (pseudoChanged && nextPseudoChangeAt) {
+    res.status(429).json({
+      message: "Vous pourrez changer votre pseudo à nouveau après 60 jours.",
+      pseudo_next_change_at: nextPseudoChangeAt
+    });
+    return;
+  }
+
   if (payload.avatarUrl && !isImgurAvatarUrl(payload.avatarUrl)) {
     res.status(400).json({
       message: "L'avatar doit être hébergé sur Imgur et finir par .jpg, .jpeg, .png ou .gif."
@@ -106,7 +151,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
   }
 
   await updateProfile(userId, {
-    pseudo: payload.pseudo,
+    pseudo: normalizedPseudo,
     bio: payload.bio,
     avatarUrl: payload.avatarUrl || undefined,
     discordUrl: payload.discordUrl || undefined,
@@ -119,7 +164,10 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     snapchatUrl: payload.snapchatUrl || undefined,
     tiktokUrl: payload.tiktokUrl || undefined
   });
-  res.json({ message: "Profil mis à jour." });
+  res.json({
+    message: "Profil mis à jour.",
+    pseudo_next_change_at: pseudoChanged ? new Date(Date.now() + PSEUDO_CHANGE_COOLDOWN_MS).toISOString() : nextPseudoChangeAt
+  });
 }
 
 export async function toggle2FA(req: Request, res: Response): Promise<void> {

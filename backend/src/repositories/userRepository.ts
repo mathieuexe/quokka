@@ -49,6 +49,7 @@ export type AdminUserRecord = {
 export type DbUser = {
   id: string;
   pseudo: string;
+  pseudo_last_changed_at: string | null;
   email: string;
   password_hash: string;
   bio: string;
@@ -99,6 +100,16 @@ export type UserIpEvent = {
 };
 
 let userIpSchemaReady: Promise<void> | null = null;
+let pseudoCooldownSchemaReady: Promise<void> | null = null;
+
+export async function ensureUserPseudoCooldownSchema(): Promise<void> {
+  if (!pseudoCooldownSchemaReady) {
+    pseudoCooldownSchemaReady = (async () => {
+      await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS pseudo_last_changed_at timestamptz");
+    })();
+  }
+  await pseudoCooldownSchemaReady;
+}
 
 async function ensureUserIpSchema(): Promise<void> {
   if (!userIpSchemaReady) {
@@ -398,10 +409,15 @@ export async function updateProfile(
     tiktokUrl?: string;
   }
 ): Promise<void> {
+  await ensureUserPseudoCooldownSchema();
   await db.query(
     `
       UPDATE users
       SET pseudo = $2,
+          pseudo_last_changed_at = CASE
+            WHEN $2 IS DISTINCT FROM pseudo THEN NOW()
+            ELSE pseudo_last_changed_at
+          END,
           bio = $3,
           language = COALESCE($4, language),
           avatar_url = $5,

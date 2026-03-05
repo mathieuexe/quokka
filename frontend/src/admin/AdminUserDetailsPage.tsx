@@ -454,6 +454,7 @@ export function AdminUserDetailsPage(): JSX.Element {
                   required
                 />
               </label>
+              <p className="dashboard-muted">En admin, le changement de pseudo est autorisé sans délai de 60 jours.</p>
               <label>
                 Email
                 <input

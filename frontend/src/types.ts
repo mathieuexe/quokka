@@ -37,6 +37,8 @@ export type User = {
   kick_url?: string | null;
   snapchat_url?: string | null;
   tiktok_url?: string | null;
+  pseudo_last_changed_at?: string | null;
+  pseudo_next_change_at?: string | null;
   badges?: Badge[];
   email_verified?: boolean;
   two_factor_enabled?: boolean;
