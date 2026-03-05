@@ -135,13 +135,8 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
 
   const pseudoChanged = normalizedPseudo !== currentUser.pseudo;
   const nextPseudoChangeAt = getPseudoNextChangeAt(currentUser.pseudo_last_changed_at);
-  if (pseudoChanged && nextPseudoChangeAt) {
-    res.status(429).json({
-      message: "Vous pourrez changer votre pseudo à nouveau après 60 jours.",
-      pseudo_next_change_at: nextPseudoChangeAt
-    });
-    return;
-  }
+  const pseudoChangeBlocked = pseudoChanged && Boolean(nextPseudoChangeAt);
+  const pseudoToUpdate = pseudoChangeBlocked ? currentUser.pseudo : normalizedPseudo;
 
   if (payload.avatarUrl && !isImgurAvatarUrl(payload.avatarUrl)) {
     res.status(400).json({
@@ -151,7 +146,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
   }
 
   await updateProfile(userId, {
-    pseudo: normalizedPseudo,
+    pseudo: pseudoToUpdate,
     bio: payload.bio,
     avatarUrl: payload.avatarUrl || undefined,
     discordUrl: payload.discordUrl || undefined,
@@ -165,8 +160,14 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     tiktokUrl: payload.tiktokUrl || undefined
   });
   res.json({
-    message: "Profil mis à jour.",
-    pseudo_next_change_at: pseudoChanged ? new Date(Date.now() + PSEUDO_CHANGE_COOLDOWN_MS).toISOString() : nextPseudoChangeAt
+    message: pseudoChangeBlocked
+      ? "Profil mis à jour. Le pseudo reste verrouillé pendant 60 jours."
+      : "Profil mis à jour.",
+    pseudo_next_change_at: pseudoChangeBlocked
+      ? nextPseudoChangeAt
+      : pseudoChanged
+        ? new Date(Date.now() + PSEUDO_CHANGE_COOLDOWN_MS).toISOString()
+        : nextPseudoChangeAt
   });
 }
 

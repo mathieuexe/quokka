@@ -172,7 +172,7 @@ export function DashboardPage(): JSX.Element {
     if (!token) return;
     setError(null);
     try {
-      await apiRequest<{ message: string }>("/dashboard/profile", {
+      const response = await apiRequest<{ message: string }>("/dashboard/profile", {
         method: "PATCH",
         token,
         body: {
@@ -191,7 +191,7 @@ export function DashboardPage(): JSX.Element {
           tiktokUrl
         }
       });
-      showToast("Profil mis à jour.");
+      showToast(response.message || "Profil mis à jour.");
       await loadDashboard();
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
