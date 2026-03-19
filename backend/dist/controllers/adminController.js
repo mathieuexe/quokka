@@ -1,17 +1,111 @@
+import { randomBytes } from "crypto";
 import { z } from "zod";
-import { listServersByPriority, listServersByUser, getServerOwner, setServerHidden, setServerVisibility, updateServerAsAdmin } from "../repositories/serverRepository.js";
-import { addSubscription, deleteSubscription, listAllSubscriptions } from "../repositories/subscriptionRepository.js";
-import { listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser } from "../repositories/userRepository.js";
+import { createServer, listServersByPriority, listServersByUser, deleteServer, deleteServersByDescriptionMarker, deleteServersByFakeFlag, getCategoryById, getServerOwner, listFakeServerIdsByServerIds, markServerAsFake, setServerHidden, setServerVerified, setServerVisibility, updateServerAsAdmin } from "../repositories/serverRepository.js";
+import { listCertificationRequests, getCertificationRequestById, updateCertificationRequestStatus } from "../repositories/certificationRepository.js";
+import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
+import { createUserWithInternalNote, creditUserBalance, debitUserBalanceIfEnough, deleteUsersByInternalNote, listAvailableBadges, listUsers, setUserBadgesAsAdmin, updateUserAsAdmin, findUserById, deleteUser, listUserIpEvents, hasDiscordAccount } from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
-import { createVerificationCode, createTwoFactorCode } from "../repositories/verificationRepository.js";
-import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
+import { createVerificationCode, createTwoFactorCode, listUserEmailEvents, toggleTwoFactor, deleteTwoFactorCodesForUser } from "../repositories/verificationRepository.js";
+import { sendEmail, sendHtmlEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate, generateAdminMailTemplate } from "../services/emailService.js";
 import { generateCustomerReference } from "../utils/references.js";
-import { updateMaintenanceSettings as updateMaintenanceSettingsInDb, getMaintenanceSettings as getMaintenanceSettingsFromDb } from "../repositories/systemRepository.js";
+import { hashPassword } from "../utils/password.js";
+import { updateMaintenanceSettings as updateMaintenanceSettingsInDb, getMaintenanceSettings as getMaintenanceSettingsFromDb, getAnnouncementSettings as getAnnouncementSettingsFromDb, updateAnnouncementSettings as updateAnnouncementSettingsInDb, getSiteBrandingSettings as getSiteBrandingSettingsFromDb, updateSiteBrandingSettings as updateSiteBrandingSettingsInDb } from "../repositories/systemRepository.js";
+import { countUnreadNotifications, listAdminNotifications, markNotificationsRead } from "../repositories/notificationRepository.js";
 const maintenanceSchema = z.object({
     is_enabled: z.boolean(),
     message: z.string().max(1000).default(""),
-    allowed_ips: z.string().max(1000).optional()
+    allowed_ips: z.string().max(1000).optional(),
+    discord_auth_enabled: z.boolean(),
+    discord_auth_message: z.string().max(1000).default("")
+});
+const announcementIconOptions = ["sparkles", "megaphone", "rocket", "warning", "gift", "bell"];
+const announcementSchema = z
+    .object({
+    is_enabled: z.boolean(),
+    text: z.string().max(500).default(""),
+    icon: z.string().max(40).optional().nullable(),
+    cta_label: z.string().max(60).optional().nullable(),
+    cta_url: z.string().max(300).optional().nullable(),
+    countdown_target: z.string().max(40).optional().nullable()
+})
+    .superRefine((payload, ctx) => {
+    if (payload.cta_url?.trim() && !isValidUrlOrPath(payload.cta_url)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "L'URL du bouton est invalide.",
+            path: ["cta_url"]
+        });
+    }
+    if (payload.is_enabled && !payload.text.trim()) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Le texte du bandeau est requis.",
+            path: ["text"]
+        });
+    }
+    if (payload.is_enabled && !payload.icon?.trim()) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "L'icône du bandeau est requise.",
+            path: ["icon"]
+        });
+    }
+    if (payload.icon?.trim() && !announcementIconOptions.includes(payload.icon.trim())) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "L'icône sélectionnée est invalide.",
+            path: ["icon"]
+        });
+    }
+    if (payload.countdown_target?.trim()) {
+        const timestamp = Date.parse(payload.countdown_target.trim());
+        if (Number.isNaN(timestamp)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "La date de compte à rebours est invalide.",
+                path: ["countdown_target"]
+            });
+        }
+    }
+});
+const FAKE_DATA_MARKER = "[FAKE_DATA]";
+const COMMUNITY_SLUGS = new Set(["discord", "stoat"]);
+function isValidUrlOrPath(value) {
+    if (!value.trim())
+        return true;
+    if (value.startsWith("/"))
+        return true;
+    try {
+        new URL(value);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+const brandingSchema = z
+    .object({
+    site_title: z.string().max(120).default(""),
+    site_description: z.string().max(500).default(""),
+    logo_url: z.string().max(300).default(""),
+    favicon_url: z.string().max(300).default("")
+})
+    .superRefine((payload, ctx) => {
+    if (!isValidUrlOrPath(payload.logo_url)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "URL du logo invalide.",
+            path: ["logo_url"]
+        });
+    }
+    if (!isValidUrlOrPath(payload.favicon_url)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "URL du favicon invalide.",
+            path: ["favicon_url"]
+        });
+    }
 });
 const promoteSchema = z
     .object({
@@ -66,12 +160,61 @@ const updateServerSchema = z.object({
     isVisible: z.boolean(),
     verified: z.boolean()
 });
+const fakeDataSchema = z
+    .object({
+    usersCount: z.coerce.number().int().min(0).max(100).default(0),
+    serversCount: z.coerce.number().int().min(0).max(100).default(0),
+    serverTitle: z.string().min(2).max(120).optional(),
+    serverDescription: z.string().min(10).max(5000).optional(),
+    serverImageUrl: z.string().url().optional().or(z.literal("")),
+    categoryId: z.string().uuid().optional()
+})
+    .superRefine((payload, ctx) => {
+    if (payload.usersCount === 0 && payload.serversCount === 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Indiquez un nombre d'utilisateurs ou de serveurs à générer.",
+            path: ["usersCount"]
+        });
+    }
+    if (payload.serversCount > 0) {
+        if (!payload.serverTitle?.trim()) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Le titre du serveur est requis.",
+                path: ["serverTitle"]
+            });
+        }
+        if (!payload.serverDescription?.trim()) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "La description du serveur est requise.",
+                path: ["serverDescription"]
+            });
+        }
+        if (!payload.categoryId) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "La catégorie est requise.",
+                path: ["categoryId"]
+            });
+        }
+    }
+});
 const deleteSubscriptionSchema = z.object({
     subscriptionId: z.string().uuid()
 });
 const resendVerificationSchema = z.object({
     userId: z.string().uuid(),
     type: z.enum(["verification", "2fa"])
+});
+const creditBalanceSchema = z.object({
+    amountEuros: z.number().positive()
+});
+const sendMailSchema = z.object({
+    userId: z.string().uuid(),
+    subject: z.string().trim().min(1).max(180),
+    content: z.string().trim().min(1).max(6000)
 });
 const deleteUserSchema = z.object({
     userId: z.string().uuid()
@@ -113,6 +256,9 @@ const promoCodeActiveSchema = z.object({
 const adminUserParamsSchema = z.object({
     userId: z.string().uuid()
 });
+const adminServerParamsSchema = z.object({
+    serverId: z.string().uuid()
+});
 export async function getAdminUsers(_req, res) {
     const [users, availableBadges] = await Promise.all([listUsers(), listAvailableBadges()]);
     const usersWithReference = users.map((user) => ({
@@ -124,31 +270,55 @@ export async function getAdminUsers(_req, res) {
 export async function getAdminServers(req, res) {
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
     const servers = await listServersByPriority(search);
-    res.json({ servers });
+    const fakeIds = await listFakeServerIdsByServerIds(servers.map((server) => server.id));
+    const serversWithFakeFlag = servers.map((server) => ({
+        ...server,
+        is_fake: fakeIds.has(server.id)
+    }));
+    res.json({ servers: serversWithFakeFlag });
 }
 export async function getAdminSubscriptions(_req, res) {
     const subscriptions = await listAllSubscriptions();
     res.json({ subscriptions });
 }
+export async function getAdminNotifications(req, res) {
+    const onlyUnread = req.query.onlyUnread === "true";
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit ?? 100)));
+    const [items, unreadCount] = await Promise.all([listAdminNotifications({ onlyUnread, limit }), countUnreadNotifications()]);
+    res.json({ notifications: items, unreadCount });
+}
 export async function getAdminUserDetails(req, res) {
     const params = adminUserParamsSchema.parse(req.params);
-    const [users, servers, availableBadges] = await Promise.all([
+    const [users, servers, availableBadges, subscriptions, emailEvents, ipEvents] = await Promise.all([
         listUsers(),
         listServersByUser(params.userId),
-        listAvailableBadges()
+        listAvailableBadges(),
+        listUserSubscriptions(params.userId),
+        listUserEmailEvents(params.userId),
+        listUserIpEvents(params.userId, 200)
     ]);
     const user = users.find((entry) => entry.id === params.userId);
     if (!user) {
         res.status(404).json({ message: "Utilisateur introuvable." });
         return;
     }
+    const discordLinked = await hasDiscordAccount(user.id);
+    const fakeServerIds = await listFakeServerIdsByServerIds(servers.map((server) => server.id));
+    const serversWithFakeFlag = servers.map((server) => ({
+        ...server,
+        is_fake: fakeServerIds.has(server.id)
+    }));
     res.json({
         user: {
             ...user,
-            customer_reference: generateCustomerReference(user.pseudo, user.id)
+            customer_reference: generateCustomerReference(user.pseudo, user.id),
+            discord_linked: discordLinked
         },
-        servers,
-        availableBadges
+        servers: serversWithFakeFlag,
+        availableBadges,
+        subscriptions,
+        emailEvents,
+        ipEvents
     });
 }
 export async function getAdminPromoCodes(_req, res) {
@@ -227,8 +397,13 @@ export async function makeServerVisible(req, res) {
 }
 export async function updateAdminUser(req, res) {
     const payload = updateUserSchema.parse(req.body);
+    const normalizedPseudo = payload.pseudo.trim();
+    if (normalizedPseudo.length < 2) {
+        res.status(400).json({ message: "Le pseudo doit contenir au moins 2 caractères." });
+        return;
+    }
     await updateUserAsAdmin(payload.userId, {
-        pseudo: payload.pseudo,
+        pseudo: normalizedPseudo,
         email: payload.email,
         bio: payload.bio,
         internalNote: payload.internalNote,
@@ -238,6 +413,34 @@ export async function updateAdminUser(req, res) {
         await setUserBadgesAsAdmin(payload.userId, payload.badgeIds);
     }
     res.json({ message: "Utilisateur mis à jour." });
+}
+export async function creditAdminUserBalance(req, res) {
+    const params = adminUserParamsSchema.parse(req.params);
+    const payload = creditBalanceSchema.parse(req.body);
+    const user = await findUserById(params.userId);
+    if (!user) {
+        res.status(404).json({ message: "Utilisateur introuvable." });
+        return;
+    }
+    const amountCents = Math.round(payload.amountEuros * 100);
+    const balance = await creditUserBalance(params.userId, amountCents);
+    res.json({ message: "Solde crédité.", balance_cents: balance });
+}
+export async function debitAdminUserBalance(req, res) {
+    const params = adminUserParamsSchema.parse(req.params);
+    const payload = creditBalanceSchema.parse(req.body);
+    const user = await findUserById(params.userId);
+    if (!user) {
+        res.status(404).json({ message: "Utilisateur introuvable." });
+        return;
+    }
+    const amountCents = Math.round(payload.amountEuros * 100);
+    const result = await debitUserBalanceIfEnough(params.userId, amountCents);
+    if (!result.ok) {
+        res.status(400).json({ message: "Solde insuffisant.", balance_cents: result.balance });
+        return;
+    }
+    res.json({ message: "Solde débité.", balance_cents: result.balance });
 }
 export async function updateAdminServer(req, res) {
     const payload = updateServerSchema.parse(req.body);
@@ -257,6 +460,27 @@ export async function updateAdminServer(req, res) {
         verified: payload.verified
     });
     res.json({ message: "Serveur mis à jour." });
+}
+export async function markAdminNotificationsRead(req, res) {
+    const body = z
+        .object({
+        all: z.boolean().optional(),
+        ids: z.array(z.string().uuid()).optional()
+    })
+        .parse(req.body);
+    await markNotificationsRead({ all: body.all === true, ids: body.ids });
+    const unreadCount = await countUnreadNotifications();
+    res.json({ message: "Notifications mises à jour.", unreadCount });
+}
+export async function removeAdminServer(req, res) {
+    const params = adminServerParamsSchema.parse(req.params);
+    const ownerId = await getServerOwner(params.serverId);
+    if (!ownerId) {
+        res.status(404).json({ message: "Serveur introuvable." });
+        return;
+    }
+    await deleteServer(params.serverId);
+    res.status(204).send();
 }
 export async function removeAdminSubscription(req, res) {
     const payload = deleteSubscriptionSchema.parse(req.body);
@@ -286,6 +510,28 @@ export async function resendVerificationCode(req, res) {
         res.json({ message: "Code 2FA envoyé." });
     }
 }
+export async function sendAdminMail(req, res) {
+    const payload = sendMailSchema.parse(req.body);
+    const user = await findUserById(payload.userId);
+    if (!user) {
+        res.status(404).json({ message: "Utilisateur introuvable." });
+        return;
+    }
+    try {
+        const template = generateAdminMailTemplate(payload.subject, payload.content);
+        await sendHtmlEmail({
+            to: user.email,
+            subject: template.subject,
+            html: template.html,
+            text: template.text
+        });
+        res.json({ message: "Email envoyé." });
+    }
+    catch (error) {
+        console.error("Erreur envoi email admin:", error);
+        res.status(500).json({ message: "Envoi d'email impossible.", error: process.env.NODE_ENV === "development" ? error.message : undefined });
+    }
+}
 export async function removeAdminUser(req, res) {
     const payload = deleteUserSchema.parse(req.body);
     // Vérifier que l'utilisateur existe
@@ -310,7 +556,170 @@ export async function updateMaintenanceSettings(req, res) {
     const payload = maintenanceSchema.parse(req.body);
     await updateMaintenanceSettingsInDb({
         ...payload,
-        allowed_ips: payload.allowed_ips ?? ""
+        allowed_ips: payload.allowed_ips ?? "",
+        discord_auth_message: payload.discord_auth_message ?? ""
     });
     res.json({ message: "Paramètres de maintenance mis à jour." });
+}
+export async function getAnnouncementSettings(_req, res) {
+    const settings = await getAnnouncementSettingsFromDb();
+    res.json(settings);
+}
+export async function updateAnnouncementSettings(req, res) {
+    const payload = announcementSchema.parse(req.body);
+    const announcement = await updateAnnouncementSettingsInDb({
+        is_enabled: payload.is_enabled,
+        text: payload.text.trim(),
+        icon: payload.icon?.trim() ?? "",
+        cta_label: payload.cta_label?.trim() ?? "",
+        cta_url: payload.cta_url?.trim() ?? "",
+        countdown_target: payload.countdown_target?.trim() ?? ""
+    });
+    res.json({ message: "Bandeau d'information mis à jour.", announcement });
+}
+export async function getSiteBrandingSettings(_req, res) {
+    const settings = await getSiteBrandingSettingsFromDb();
+    res.json(settings);
+}
+export async function updateSiteBrandingSettings(req, res) {
+    const payload = brandingSchema.parse(req.body);
+    await updateSiteBrandingSettingsInDb({
+        site_title: payload.site_title.trim(),
+        site_description: payload.site_description.trim(),
+        logo_url: payload.logo_url.trim(),
+        favicon_url: payload.favicon_url.trim()
+    });
+    res.json({ message: "Identité du site mise à jour." });
+}
+export async function disableUserTwoFactor(req, res) {
+    const params = adminUserParamsSchema.parse(req.params);
+    await toggleTwoFactor(params.userId, false);
+    await deleteTwoFactorCodesForUser(params.userId);
+    res.json({ message: "Double authentification désactivée pour l'utilisateur.", two_factor_enabled: false });
+}
+export async function createFakeData(req, res) {
+    try {
+        const payload = fakeDataSchema.parse(req.body);
+        const createdUsers = [];
+        for (let index = 0; index < payload.usersCount; index += 1) {
+            const seed = randomBytes(4).toString("hex");
+            const pseudo = `Fake_${seed}`;
+            const email = `fake_${seed}@example.com`;
+            const passwordHash = await hashPassword(randomBytes(18).toString("hex"));
+            const user = await createUserWithInternalNote({
+                pseudo,
+                email,
+                passwordHash,
+                internalNote: FAKE_DATA_MARKER,
+                language: "fr"
+            });
+            createdUsers.push(user.id);
+        }
+        let serverOwners = createdUsers;
+        if (payload.serversCount > 0) {
+            const category = await getCategoryById(payload.categoryId ?? "");
+            if (!category) {
+                res.status(404).json({ message: "Catégorie introuvable." });
+                return;
+            }
+            if (serverOwners.length === 0) {
+                const seed = randomBytes(4).toString("hex");
+                const pseudo = `Fake_${seed}`;
+                const email = `fake_${seed}@example.com`;
+                const passwordHash = await hashPassword(randomBytes(18).toString("hex"));
+                const user = await createUserWithInternalNote({
+                    pseudo,
+                    email,
+                    passwordHash,
+                    internalNote: FAKE_DATA_MARKER,
+                    language: "fr"
+                });
+                serverOwners = [user.id];
+            }
+            const baseTitle = payload.serverTitle?.trim() ?? "";
+            const baseDescription = payload.serverDescription?.trim() ?? "";
+            const safeDescription = baseDescription.slice(0, 5000);
+            const description = safeDescription;
+            const bannerUrl = payload.serverImageUrl?.trim() || undefined;
+            const isCommunityCategory = COMMUNITY_SLUGS.has(category.slug);
+            const inviteLink = isCommunityCategory ? "https://discord.gg/fake" : undefined;
+            const ip = isCommunityCategory ? undefined : "127.0.0.1";
+            const port = isCommunityCategory ? undefined : 25565;
+            for (let index = 0; index < payload.serversCount; index += 1) {
+                const suffix = payload.serversCount > 1 ? ` ${index + 1}` : "";
+                const trimmedTitle = baseTitle.slice(0, Math.max(0, 120 - suffix.length));
+                const name = `${trimmedTitle}${suffix}`.trim();
+                const ownerId = serverOwners[index % serverOwners.length];
+                const server = await createServer({
+                    userId: ownerId,
+                    categoryId: category.id,
+                    name,
+                    description,
+                    website: undefined,
+                    countryCode: "FR",
+                    ip,
+                    port,
+                    inviteLink,
+                    bannerUrl,
+                    isPublic: true
+                });
+                await markServerAsFake(server.id);
+            }
+        }
+        res.json({ message: "Données fictives créées.", usersCreated: createdUsers.length, serversCreated: payload.serversCount });
+    }
+    catch (error) {
+        if (error instanceof z.ZodError) {
+            res.status(400).json({ message: "Données invalides.", issues: error.issues });
+            return;
+        }
+        res.status(500).json({
+            message: "Création des données fictives impossible.",
+            error: process.env.NODE_ENV === "development" && error instanceof Error ? error.message : undefined
+        });
+    }
+}
+export async function deleteFakeData(_req, res) {
+    const deletedByFlag = await deleteServersByFakeFlag();
+    const deletedByMarker = await deleteServersByDescriptionMarker(FAKE_DATA_MARKER);
+    const deletedServers = deletedByFlag + deletedByMarker;
+    const deletedUsers = await deleteUsersByInternalNote(FAKE_DATA_MARKER);
+    res.json({ message: "Données fictives supprimées.", deletedServers, deletedUsers });
+}
+export async function getAdminCertifications(req, res) {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const requests = await listCertificationRequests(status);
+    res.json({ requests });
+}
+export async function acceptAdminCertification(req, res) {
+    const requestId = z.string().uuid().parse(req.params.requestId);
+    const request = await getCertificationRequestById(requestId);
+    if (!request) {
+        res.status(404).json({ message: "Demande introuvable." });
+        return;
+    }
+    if (request.status !== "pending") {
+        res.status(400).json({ message: "La demande n'est pas en attente." });
+        return;
+    }
+    await updateCertificationRequestStatus(requestId, "accepted");
+    await setServerVerified(request.server_id, true);
+    res.json({ message: "Demande de certification acceptée. Le serveur est maintenant certifié." });
+}
+export async function rejectAdminCertification(req, res) {
+    const requestId = z.string().uuid().parse(req.params.requestId);
+    const schema = z.object({ reason: z.string().optional() });
+    const payload = schema.parse(req.body);
+    const request = await getCertificationRequestById(requestId);
+    if (!request) {
+        res.status(404).json({ message: "Demande introuvable." });
+        return;
+    }
+    if (request.status !== "pending") {
+        res.status(400).json({ message: "La demande n'est pas en attente." });
+        return;
+    }
+    await updateCertificationRequestStatus(requestId, "rejected", payload.reason);
+    await setServerVerified(request.server_id, false);
+    res.json({ message: "Demande de certification refusée." });
 }

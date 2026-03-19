@@ -85,6 +85,15 @@ export function DashboardPage(): JSX.Element {
   const [promoteStartDateByServer, setPromoteStartDateByServer] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<DashboardSection>("profile");
   const [error, setError] = useState<string | null>(null);
+  
+  // Certification
+  const [certifyingServerId, setCertifyingServerId] = useState<string | null>(null);
+  const [certStatus, setCertStatus] = useState<any>(null);
+  const [certPresentation, setCertPresentation] = useState("");
+  const [certSocialLinks, setCertSocialLinks] = useState("");
+  const [certAttachments, setCertAttachments] = useState("");
+  const [certLoading, setCertLoading] = useState(false);
+
   const discordAccount = data?.user.discord_account ?? null;
 
   async function loadDashboard(): Promise<void> {
@@ -312,6 +321,45 @@ export function DashboardPage(): JSX.Element {
       await loadDashboard();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Suppression serveur impossible.");
+    }
+  }
+
+  async function openCertificationModal(serverId: string): Promise<void> {
+    if (!token) return;
+    setCertifyingServerId(serverId);
+    setCertLoading(true);
+    setCertStatus(null);
+    setCertPresentation("");
+    setCertSocialLinks("");
+    setCertAttachments("");
+    try {
+      const data = await apiRequest<{ request: any }>(`/servers/${serverId}/certification`, { token });
+      setCertStatus(data.request);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCertLoading(false);
+    }
+  }
+
+  async function submitCertification(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!token || !certifyingServerId) return;
+    try {
+      await apiRequest(`/servers/${certifyingServerId}/certification`, {
+        method: "POST",
+        token,
+        body: {
+          presentation: certPresentation,
+          socialLinks: certSocialLinks,
+          attachments: certAttachments ? certAttachments.split("\n").map(l => l.trim()).filter(Boolean) : []
+        }
+      });
+      showToast("Demande de certification envoyée.");
+      setCertifyingServerId(null);
+      await loadDashboard();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erreur lors de la demande");
     }
   }
 
@@ -703,6 +751,79 @@ export function DashboardPage(): JSX.Element {
             <p>Cliquez sur la banniere d'un serveur pour afficher ses details, l'edition et la promotion.</p>
           </div>
 
+          {certifyingServerId && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <h3>Demande de certification</h3>
+                <p>La certification permet de mettre en valeur votre serveur avec un badge exclusif.</p>
+                {certLoading ? (
+                  <p>Chargement du statut...</p>
+                ) : (
+                  <>
+                    {certStatus?.status === "pending" ? (
+                      <div className="dashboard-feedback">
+                        <p>Une demande est déjà en cours de traitement pour ce serveur.</p>
+                      </div>
+                    ) : certStatus?.status === "rejected" && (Math.ceil(Math.abs(new Date().getTime() - new Date(certStatus.updated_at).getTime()) / (1000 * 60 * 60 * 24)) < 60) ? (
+                      <div className="dashboard-feedback">
+                        <p>Votre dernière demande a été refusée le {new Date(certStatus.updated_at).toLocaleDateString("fr-FR")}.</p>
+                        <p>Vous devez attendre 60 jours avant de soumettre une nouvelle demande.</p>
+                        {certStatus.rejection_reason && <p><strong>Motif du refus :</strong> {certStatus.rejection_reason}</p>}
+                      </div>
+                    ) : (
+                      <form className="form" onSubmit={submitCertification}>
+                        {certStatus?.status === "rejected" && (
+                          <div className="dashboard-feedback" style={{ marginBottom: "1rem" }}>
+                            <p>Votre demande précédente a été refusée, mais le délai de 60 jours est écoulé.</p>
+                            {certStatus.rejection_reason && <p><strong>Rappel du motif :</strong> {certStatus.rejection_reason}</p>}
+                          </div>
+                        )}
+                        <label>
+                          Présentation détaillée du projet (min 20 caractères)
+                          <textarea
+                            value={certPresentation}
+                            onChange={(e) => setCertPresentation(e.target.value)}
+                            rows={6}
+                            required
+                            minLength={20}
+                            placeholder="Expliquez pourquoi ce serveur mérite d'être certifié..."
+                          />
+                        </label>
+                        <label>
+                          Liens vers les réseaux sociaux ou URL d'article
+                          <input
+                            type="text"
+                            value={certSocialLinks}
+                            onChange={(e) => setCertSocialLinks(e.target.value)}
+                            placeholder="https://twitter.com/... , https://article.com/..."
+                          />
+                        </label>
+                        <label>
+                          Pièces jointes (URLs - une par ligne, facultatif)
+                          <textarea
+                            value={certAttachments}
+                            onChange={(e) => setCertAttachments(e.target.value)}
+                            rows={3}
+                            placeholder="https://i.imgur.com/...&#10;https://i.imgur.com/..."
+                          />
+                        </label>
+                        <div className="modal-actions" style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
+                          <button type="submit" className="btn">Envoyer la demande</button>
+                          <button type="button" className="btn btn-ghost" onClick={() => setCertifyingServerId(null)}>Annuler</button>
+                        </div>
+                      </form>
+                    )}
+                    {((certStatus?.status === "pending") || (certStatus?.status === "rejected" && Math.ceil(Math.abs(new Date().getTime() - new Date(certStatus.updated_at).getTime()) / (1000 * 60 * 60 * 24)) < 60)) && (
+                      <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", marginTop: "1rem" }}>
+                        <button type="button" className="btn btn-ghost" onClick={() => setCertifyingServerId(null)}>Fermer</button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {!data?.servers.length ? (
             <p>Aucun serveur ajoute.</p>
           ) : (
@@ -858,6 +979,11 @@ export function DashboardPage(): JSX.Element {
                           <button className="btn" type="button" onClick={() => startEdit(server)}>
                             Éditer
                           </button>
+                          {!server.verified && (
+                            <button className="btn btn-ghost" type="button" onClick={() => openCertificationModal(server.id)}>
+                              Demander la certification
+                            </button>
+                          )}
                           <button className="btn btn-ghost" type="button" onClick={() => void onDeleteServer(server.id)}>
                             Supprimer
                           </button>

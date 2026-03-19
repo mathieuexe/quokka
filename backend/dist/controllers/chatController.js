@@ -1,7 +1,9 @@
 import { randomBytes } from "crypto";
 import { z } from "zod";
-import { clearChatMessagesAndCreateSystemMessage, createChatMessage, createGuestChatMessage, createSystemMessage, deleteChatMessageById, deleteChatPresence, getChatMessageById, getChatSettings, listChatMessagesAfter, listOnlineChatGuests, listOnlineChatUsers, listRecentChatMessages, setChatMaintenanceEnabled, upsertChatPresence } from "../repositories/chatRepository.js";
+import { clearChatMessagesAndCreateSystemMessage, createChatMessage, createGuestChatMessage, createSystemMessage, deleteChatMessageById, deleteChatPresence, getChatMessageById, getChatSettings, listChatMessagesAfter, listOnlineChatGuests, listOnlineChatUsers, listRecentChatMessages, setChatMaintenanceEnabled, upsertChatPresence, upsertGuestPresence } from "../repositories/chatRepository.js";
 import { isUserBanned, isUserMuted } from "../repositories/chatModerationRepository.js";
+import { insertUserIpEvent } from "../repositories/userRepository.js";
+import { getRequestIp, resolveIpTrace } from "../middleware/auth.js";
 const listSchema = z.object({
     after: z.string().optional(),
     limit: z.coerce.number().int().positive().max(200).optional()
@@ -25,6 +27,13 @@ const onlineSchema = z.object({
 });
 const maintenanceSchema = z.object({
     enabled: z.boolean()
+});
+const presenceSchema = z.object({
+    guestPseudo: z
+        .string()
+        .trim()
+        .regex(/^Guest_[A-Za-z0-9]{1,6}$/, "Pseudo invité invalide.")
+        .optional()
 });
 function generateGuestPseudo() {
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -119,15 +128,40 @@ export async function postChatMessage(req, res) {
         res.status(429).json({ message: "Anti-spam : veuillez attendre 5 secondes entre deux messages." });
         return;
     }
+    try {
+        const ipTrace = await resolveIpTrace(getRequestIp(req));
+        await insertUserIpEvent({
+            userId,
+            eventType: "chat_message",
+            ip: ipTrace.ip,
+            provider: ipTrace.provider,
+            country: ipTrace.country,
+            region: ipTrace.region,
+            city: ipTrace.city,
+            chatMessageId: message.id
+        });
+    }
+    catch { }
     res.status(201).json({ message });
 }
 export async function postChatPresence(req, res) {
-    const userId = req.user?.sub;
-    if (!userId) {
-        res.status(401).json({ message: "Authentification requise." });
-        return;
+    try {
+        const userId = req.user?.sub;
+        const payload = presenceSchema.parse(req.body ?? {});
+        if (userId) {
+            await upsertChatPresence(userId);
+            res.status(204).send();
+            return;
+        }
+        if (payload.guestPseudo) {
+            await upsertGuestPresence(payload.guestPseudo);
+            res.status(204).send();
+            return;
+        }
     }
-    await upsertChatPresence(userId);
+    catch (error) {
+        console.error("chat presence error:", error instanceof Error ? error.message : error);
+    }
     res.status(204).send();
 }
 export async function deleteChatPresenceHandler(req, res) {
@@ -144,14 +178,27 @@ export async function getChatOnlineUsers(req, res) {
     const windowSeconds = query.window ?? 60;
     const limit = query.limit ?? 50;
     const users = await listOnlineChatUsers(windowSeconds, limit);
-    res.json({ users });
+    res.json({
+        users: users.map((user) => ({
+            user_id: user.id,
+            user_pseudo: user.pseudo,
+            user_avatar_url: user.avatar_url,
+            user_role: user.role,
+            last_seen_at: user.last_seen
+        }))
+    });
 }
 export async function getChatOnlineGuests(req, res) {
     const query = onlineSchema.parse(req.query);
     const windowSeconds = query.window ?? 60;
     const limit = query.limit ?? 50;
     const guests = await listOnlineChatGuests(windowSeconds, limit);
-    res.json({ guests });
+    res.json({
+        guests: guests.map((guest) => ({
+            guest_pseudo: guest.pseudo,
+            last_seen_at: guest.last_seen_at
+        }))
+    });
 }
 export async function postChatClear(req, res) {
     const actorUserId = req.user?.sub;

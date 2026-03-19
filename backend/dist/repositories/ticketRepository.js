@@ -229,6 +229,97 @@ export async function createTicketWithMessage(input) {
         client.release();
     }
 }
+export async function createTicketWithAdminMessage(input) {
+    const client = await db.connect();
+    try {
+        await client.query("BEGIN");
+        const ticketResult = await client.query(`
+        INSERT INTO tickets (
+          reference,
+          user_id,
+          assigned_admin_id,
+          status,
+          priority,
+          category,
+          subcategory,
+          server_id,
+          subscription_id,
+          server_url,
+          last_message_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        RETURNING
+          id,
+          reference,
+          user_id,
+          $11::text AS user_pseudo,
+          $12::text AS user_avatar_url,
+          assigned_admin_id,
+          NULL::text AS assigned_admin_pseudo,
+          status,
+          priority,
+          category,
+          subcategory,
+          server_id,
+          NULL::text AS server_name,
+          subscription_id,
+          server_url,
+          created_at,
+          updated_at,
+          last_message_at
+      `, [
+            input.reference,
+            input.userId,
+            input.adminUserId,
+            input.status,
+            input.priority,
+            input.category,
+            input.subcategory ?? null,
+            input.serverId ?? null,
+            input.subscriptionId ?? null,
+            input.serverUrl ?? null,
+            "",
+            null
+        ]);
+        const ticketRow = ticketResult.rows[0];
+        const messageResult = await client.query(`
+        INSERT INTO ticket_messages (ticket_id, admin_user_id, author_role, message, attachments)
+        VALUES ($1, $2, 'admin', $3, $4)
+        RETURNING
+          id,
+          ticket_id,
+          user_id,
+          admin_user_id,
+          author_role,
+          message,
+          attachments,
+          created_at,
+          NULL::text AS user_pseudo,
+          NULL::text AS user_avatar_url,
+          NULL::text AS admin_pseudo,
+          NULL::text AS admin_avatar_url
+      `, [ticketRow.id, input.adminUserId, input.message, JSON.stringify(input.attachments)]);
+        await client.query("COMMIT");
+        return {
+            ticket: ticketRow,
+            message: {
+                ...messageResult.rows[0],
+                attachments: input.attachments,
+                user_pseudo: null,
+                user_avatar_url: null,
+                admin_pseudo: null,
+                admin_avatar_url: null
+            }
+        };
+    }
+    catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    }
+    finally {
+        client.release();
+    }
+}
 export async function createTicketMessage(input) {
     const client = await db.connect();
     try {

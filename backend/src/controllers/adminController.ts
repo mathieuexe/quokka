@@ -13,9 +13,15 @@ import {
   listFakeServerIdsByServerIds,
   markServerAsFake,
   setServerHidden,
+  setServerVerified,
   setServerVisibility,
   updateServerAsAdmin
 } from "../repositories/serverRepository.js";
+import {
+  listCertificationRequests,
+  getCertificationRequestById,
+  updateCertificationRequestStatus
+} from "../repositories/certificationRepository.js";
 import { addSubscription, deleteSubscription, listAllSubscriptions, listUserSubscriptions } from "../repositories/subscriptionRepository.js";
 import {
   createUserWithInternalNote,
@@ -793,4 +799,52 @@ export async function deleteFakeData(_req: Request, res: Response): Promise<void
   const deletedServers = deletedByFlag + deletedByMarker;
   const deletedUsers = await deleteUsersByInternalNote(FAKE_DATA_MARKER);
   res.json({ message: "Données fictives supprimées.", deletedServers, deletedUsers });
+}
+
+export async function getAdminCertifications(req: Request, res: Response): Promise<void> {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const requests = await listCertificationRequests(status);
+  res.json({ requests });
+}
+
+export async function acceptAdminCertification(req: Request, res: Response): Promise<void> {
+  const requestId = z.string().uuid().parse(req.params.requestId);
+  
+  const request = await getCertificationRequestById(requestId);
+  if (!request) {
+    res.status(404).json({ message: "Demande introuvable." });
+    return;
+  }
+
+  if (request.status !== "pending") {
+    res.status(400).json({ message: "La demande n'est pas en attente." });
+    return;
+  }
+
+  await updateCertificationRequestStatus(requestId, "accepted");
+  await setServerVerified(request.server_id, true);
+
+  res.json({ message: "Demande de certification acceptée. Le serveur est maintenant certifié." });
+}
+
+export async function rejectAdminCertification(req: Request, res: Response): Promise<void> {
+  const requestId = z.string().uuid().parse(req.params.requestId);
+  const schema = z.object({ reason: z.string().optional() });
+  const payload = schema.parse(req.body);
+
+  const request = await getCertificationRequestById(requestId);
+  if (!request) {
+    res.status(404).json({ message: "Demande introuvable." });
+    return;
+  }
+
+  if (request.status !== "pending") {
+    res.status(400).json({ message: "La demande n'est pas en attente." });
+    return;
+  }
+
+  await updateCertificationRequestStatus(requestId, "rejected", payload.reason);
+  await setServerVerified(request.server_id, false);
+
+  res.json({ message: "Demande de certification refusée." });
 }

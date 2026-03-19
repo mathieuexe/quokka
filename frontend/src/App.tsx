@@ -29,6 +29,7 @@ const AdminLayout = lazy(() => import("./admin/AdminLayout").then((module) => ({
 const AdminUsersPage = lazy(() => import("./admin/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })));
 const AdminUserDetailsPage = lazy(() => import("./admin/AdminUserDetailsPage").then((module) => ({ default: module.AdminUserDetailsPage })));
 const AdminServersPage = lazy(() => import("./admin/AdminServersPage").then((module) => ({ default: module.AdminServersPage })));
+const AdminCertificationsPage = lazy(() => import("./admin/AdminCertificationsPage").then((module) => ({ default: module.AdminCertificationsPage })));
 const AdminSettingsPage = lazy(() => import("./admin/AdminSettingsPage").then((module) => ({ default: module.AdminSettingsPage })));
 const AdminSubscriptionsPage = lazy(() => import("./admin/AdminSubscriptionsPage").then((module) => ({ default: module.AdminSubscriptionsPage })));
 const AdminTicketsPage = lazy(() => import("./admin/AdminTicketsPage").then((module) => ({ default: module.AdminTicketsPage })));
@@ -52,6 +53,7 @@ const preloaders = {
   adminLayout: () => import("./admin/AdminLayout"),
   adminUsers: () => import("./admin/AdminUsersPage"),
   adminServers: () => import("./admin/AdminServersPage"),
+  adminCertifications: () => import("./admin/AdminCertificationsPage"),
   adminTickets: () => import("./admin/AdminTicketsPage"),
   adminSubscriptions: () => import("./admin/AdminSubscriptionsPage"),
   adminSettings: () => import("./admin/AdminSettingsPage"),
@@ -353,6 +355,7 @@ export default function App(): JSX.Element {
         preloaders.adminLayout();
         preloaders.adminUsers();
         preloaders.adminServers();
+        preloaders.adminCertifications();
         preloaders.adminTickets();
         preloaders.adminSubscriptions();
         preloaders.adminSettings();
@@ -508,6 +511,7 @@ export default function App(): JSX.Element {
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="users/:userId" element={<AdminUserDetailsPage />} />
               <Route path="servers" element={<AdminServersPage />} />
+              <Route path="certifications" element={<AdminCertificationsPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
               <Route path="subscriptions" element={<AdminSubscriptionsPage />} />
               <Route path="tickets" element={<AdminTicketsPage />} />

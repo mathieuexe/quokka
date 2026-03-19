@@ -19,6 +19,92 @@ const BADGE_DISPLAY_ORDER_SQL = `
     ELSE 999
   END
 `;
+let userIpSchemaReady = null;
+let pseudoCooldownSchemaReady = null;
+let pseudoCooldownSchemaAvailable = true;
+function getPgErrorCode(error) {
+    if (!error || typeof error !== "object")
+        return null;
+    if (!("code" in error))
+        return null;
+    const code = error.code;
+    return typeof code === "string" ? code : null;
+}
+export async function ensureUserPseudoCooldownSchema() {
+    if (!pseudoCooldownSchemaReady) {
+        pseudoCooldownSchemaReady = (async () => {
+            try {
+                await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS pseudo_last_changed_at timestamptz");
+                pseudoCooldownSchemaAvailable = true;
+            }
+            catch (error) {
+                pseudoCooldownSchemaAvailable = false;
+                console.error("pseudo_last_changed_at unavailable:", error instanceof Error ? error.message : error);
+            }
+        })();
+    }
+    await pseudoCooldownSchemaReady;
+}
+async function ensureUserIpSchema() {
+    if (!userIpSchemaReady) {
+        userIpSchemaReady = (async () => {
+            try {
+                await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+            }
+            catch (error) {
+                console.error("pgcrypto extension unavailable:", error instanceof Error ? error.message : error);
+            }
+            await db.query(`
+          CREATE TABLE IF NOT EXISTS user_ip_events (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            event_type text NOT NULL,
+            ip text NOT NULL,
+            provider text,
+            country text,
+            region text,
+            city text,
+            chat_message_id uuid,
+            created_at timestamptz NOT NULL DEFAULT NOW(),
+            CONSTRAINT user_ip_events_event_type CHECK (event_type IN ('register', 'login', 'chat_message'))
+          )
+        `);
+            await db.query("CREATE INDEX IF NOT EXISTS idx_user_ip_events_user_id ON user_ip_events(user_id)");
+            await db.query("CREATE INDEX IF NOT EXISTS idx_user_ip_events_created_at ON user_ip_events(created_at DESC)");
+        })();
+    }
+    await userIpSchemaReady;
+}
+export async function insertUserIpEvent(entry) {
+    if (!entry.ip)
+        return;
+    await ensureUserIpSchema();
+    await db.query(`
+      INSERT INTO user_ip_events (
+        user_id, event_type, ip, provider, country, region, city, chat_message_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
+        entry.userId,
+        entry.eventType,
+        entry.ip,
+        entry.provider ?? null,
+        entry.country ?? null,
+        entry.region ?? null,
+        entry.city ?? null,
+        entry.chatMessageId ?? null
+    ]);
+}
+export async function listUserIpEvents(userId, limit = 50) {
+    await ensureUserIpSchema();
+    const result = await db.query(`
+      SELECT id, user_id, event_type, ip, provider, country, region, city, chat_message_id, created_at
+      FROM user_ip_events
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `, [userId, limit]);
+    return result.rows;
+}
 export async function findUserByEmail(email) {
     const result = await db.query("SELECT * FROM users WHERE email = $1 LIMIT 1", [email]);
     return result.rows[0] ?? null;
@@ -41,12 +127,39 @@ export async function findUserByDiscordId(discordId) {
     `, [discordId]);
     return result.rows[0] ?? null;
 }
+export async function getDiscordAccountByUserId(userId) {
+    const result = await db.query(`
+      SELECT id, user_id, discord_id, username, avatar_url, email, locale, profile, created_at, updated_at
+      FROM users_discord
+      WHERE user_id = $1
+      LIMIT 1
+    `, [userId]);
+    return result.rows[0] ?? null;
+}
+export async function hasDiscordAccount(userId) {
+    const result = await db.query(`
+      SELECT EXISTS (
+        SELECT 1
+        FROM users_discord
+        WHERE user_id = $1
+      ) as exists
+    `, [userId]);
+    return result.rows[0]?.exists ?? false;
+}
 export async function createUser(params) {
     const result = await db.query(`
       INSERT INTO users (pseudo, email, password_hash, language)
       VALUES ($1, $2, $3, $4)
       RETURNING *
     `, [params.pseudo, params.email, params.passwordHash, params.language || "fr"]);
+    return result.rows[0];
+}
+export async function createUserWithInternalNote(params) {
+    const result = await db.query(`
+      INSERT INTO users (pseudo, email, password_hash, language, internal_note)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [params.pseudo, params.email, params.passwordHash, params.language || "fr", params.internalNote]);
     return result.rows[0];
 }
 export async function createUserFromDiscord(params) {
@@ -123,6 +236,56 @@ export async function updateUserAvatarIfMissing(userId, avatarUrl) {
     `, [userId, avatarUrl]);
 }
 export async function updateProfile(userId, input) {
+    await ensureUserPseudoCooldownSchema();
+    const values = [
+        userId,
+        input.pseudo,
+        input.bio,
+        input.language,
+        input.avatarUrl ?? null,
+        input.discordUrl ?? null,
+        input.xUrl ?? null,
+        input.blueskyUrl ?? null,
+        input.stoatUrl ?? null,
+        input.youtubeUrl ?? null,
+        input.twitchUrl ?? null,
+        input.kickUrl ?? null,
+        input.snapchatUrl ?? null,
+        input.tiktokUrl ?? null
+    ];
+    if (pseudoCooldownSchemaAvailable) {
+        try {
+            await db.query(`
+          UPDATE users
+          SET pseudo = $2,
+              pseudo_last_changed_at = CASE
+                WHEN $2 IS DISTINCT FROM pseudo THEN NOW()
+                ELSE pseudo_last_changed_at
+              END,
+              bio = $3,
+              language = COALESCE($4, language),
+              avatar_url = $5,
+              discord_url = $6,
+              x_url = $7,
+              bluesky_url = $8,
+              stoat_url = $9,
+              youtube_url = $10,
+              twitch_url = $11,
+              kick_url = $12,
+              snapchat_url = $13,
+              tiktok_url = $14,
+              updated_at = NOW()
+          WHERE id = $1
+        `, values);
+            return;
+        }
+        catch (error) {
+            if (getPgErrorCode(error) !== "42703") {
+                throw error;
+            }
+            pseudoCooldownSchemaAvailable = false;
+        }
+    }
     await db.query(`
       UPDATE users
       SET pseudo = $2,
@@ -140,22 +303,7 @@ export async function updateProfile(userId, input) {
           tiktok_url = $14,
           updated_at = NOW()
       WHERE id = $1
-    `, [
-        userId,
-        input.pseudo,
-        input.bio,
-        input.language,
-        input.avatarUrl ?? null,
-        input.discordUrl ?? null,
-        input.xUrl ?? null,
-        input.blueskyUrl ?? null,
-        input.stoatUrl ?? null,
-        input.youtubeUrl ?? null,
-        input.twitchUrl ?? null,
-        input.kickUrl ?? null,
-        input.snapchatUrl ?? null,
-        input.tiktokUrl ?? null
-    ]);
+    `, values);
 }
 export async function listUsers() {
     const result = await db.query(`
@@ -171,6 +319,8 @@ export async function listUsers() {
         u.email_verified,
         u.two_factor_enabled,
         u.language,
+        u.balance_cents,
+        u.last_balance_update,
         COALESCE(
           json_agg(
             json_build_object(
@@ -194,6 +344,16 @@ export async function listUsers() {
         badges: Array.isArray(row.badges) ? row.badges : []
     }));
 }
+export async function listUserIdsByInternalNote(note, limit = 200) {
+    const result = await db.query(`
+      SELECT id
+      FROM users
+      WHERE internal_note = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `, [note, limit]);
+    return result.rows.map((row) => row.id);
+}
 export async function updateLastLogin(userId) {
     await db.query("UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1", [userId]);
 }
@@ -208,6 +368,51 @@ export async function updateUserAsAdmin(userId, input) {
           updated_at = NOW()
       WHERE id = $1
     `, [userId, input.pseudo, input.email, input.bio, input.internalNote, input.role]);
+}
+export async function creditUserBalance(userId, amountCents) {
+    const result = await db.query(`
+      UPDATE users
+      SET balance_cents = balance_cents + $2,
+          last_balance_update = NOW(),
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING balance_cents
+    `, [userId, amountCents]);
+    return result.rows[0]?.balance_cents ?? 0;
+}
+export async function debitUserBalanceIfEnough(userId, amountCents) {
+    const client = await db.connect();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query(`
+        SELECT balance_cents
+        FROM users
+        WHERE id = $1
+        FOR UPDATE
+      `, [userId]);
+        const balance = result.rows[0]?.balance_cents ?? 0;
+        if (balance < amountCents) {
+            await client.query("ROLLBACK");
+            return { ok: false, balance };
+        }
+        const updated = await client.query(`
+        UPDATE users
+        SET balance_cents = balance_cents - $2,
+            last_balance_update = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING balance_cents
+      `, [userId, amountCents]);
+        await client.query("COMMIT");
+        return { ok: true, balance: updated.rows[0]?.balance_cents ?? balance - amountCents };
+    }
+    catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    }
+    finally {
+        client.release();
+    }
 }
 export async function listAvailableBadges() {
     const result = await db.query(`
@@ -248,6 +453,10 @@ export async function setUserBadgesAsAdmin(userId, badgeIds) {
 }
 export async function deleteUser(userId) {
     await db.query("DELETE FROM users WHERE id = $1", [userId]);
+}
+export async function deleteUsersByInternalNote(note) {
+    const result = await db.query("DELETE FROM users WHERE internal_note = $1", [note]);
+    return result.rowCount ?? 0;
 }
 export async function isUserAmongFirst100(userId) {
     const result = await db.query(`

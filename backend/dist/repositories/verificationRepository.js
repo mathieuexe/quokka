@@ -64,6 +64,27 @@ export async function markTwoFactorCodeAsUsed(id) {
       WHERE id = $1
     `, [id]);
 }
+export async function listUserEmailEvents(userId) {
+    const result = await db.query(`
+      SELECT
+        'verification'::text AS type,
+        created_at,
+        expires_at,
+        used
+      FROM email_verification_codes
+      WHERE user_id = $1
+      UNION ALL
+      SELECT
+        '2fa'::text AS type,
+        created_at,
+        expires_at,
+        used
+      FROM two_factor_codes
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+    `, [userId]);
+    return result.rows;
+}
 export async function deleteTwoFactorCodesForUser(userId) {
     await db.query(`
       DELETE FROM two_factor_codes

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { listServersByUser } from "../repositories/serverRepository.js";
 import { listUserSubscriptions } from "../repositories/subscriptionRepository.js";
-import { findUserById, listBadgesByUserId, updateProfile } from "../repositories/userRepository.js";
+import { ensureUserPseudoCooldownSchema, findUserById, getDiscordAccountByUserId, listBadgesByUserId, updateProfile } from "../repositories/userRepository.js";
 import { ensureMonthlyLikesReset } from "../repositories/voteRepository.js";
 import { toggleTwoFactor } from "../repositories/verificationRepository.js";
 const updateProfileSchema = z.object({
@@ -35,6 +35,20 @@ function isImgurAvatarUrl(url) {
         return false;
     }
 }
+const PSEUDO_CHANGE_COOLDOWN_DAYS = 60;
+const PSEUDO_CHANGE_COOLDOWN_MS = PSEUDO_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+function getPseudoNextChangeAt(lastChangedAt) {
+    if (!lastChangedAt)
+        return null;
+    const lastChanged = new Date(lastChangedAt);
+    const timestamp = lastChanged.getTime();
+    if (!Number.isFinite(timestamp))
+        return null;
+    const nextAllowedAt = new Date(timestamp + PSEUDO_CHANGE_COOLDOWN_MS);
+    if (nextAllowedAt.getTime() <= Date.now())
+        return null;
+    return nextAllowedAt.toISOString();
+}
 export async function getDashboard(req, res) {
     const userId = req.user?.sub;
     if (!userId) {
@@ -42,15 +56,17 @@ export async function getDashboard(req, res) {
         return;
     }
     await ensureMonthlyLikesReset();
+    await ensureUserPseudoCooldownSchema();
     const user = await findUserById(userId);
     if (!user) {
         res.status(404).json({ message: "Utilisateur introuvable." });
         return;
     }
-    const [servers, subscriptions, badges] = await Promise.all([
+    const [servers, subscriptions, badges, discordAccount] = await Promise.all([
         listServersByUser(userId),
         listUserSubscriptions(userId),
-        listBadgesByUserId(userId)
+        listBadgesByUserId(userId),
+        getDiscordAccountByUserId(userId)
     ]);
     res.json({
         user: {
@@ -62,6 +78,8 @@ export async function getDashboard(req, res) {
             last_login_at: user.last_login_at,
             email_verified: user.email_verified,
             two_factor_enabled: user.two_factor_enabled,
+            balance_cents: user.balance_cents,
+            last_balance_update: user.last_balance_update,
             discord_url: user.discord_url,
             x_url: user.x_url,
             bluesky_url: user.bluesky_url,
@@ -71,8 +89,11 @@ export async function getDashboard(req, res) {
             kick_url: user.kick_url,
             snapchat_url: user.snapchat_url,
             tiktok_url: user.tiktok_url,
+            pseudo_last_changed_at: user.pseudo_last_changed_at,
+            pseudo_next_change_at: getPseudoNextChangeAt(user.pseudo_last_changed_at),
             badges,
-            role: user.role
+            role: user.role,
+            discord_account: discordAccount
         },
         servers,
         subscriptions
@@ -85,6 +106,21 @@ export async function patchProfile(req, res) {
         return;
     }
     const payload = updateProfileSchema.parse(req.body);
+    const normalizedPseudo = payload.pseudo.trim();
+    if (normalizedPseudo.length < 2) {
+        res.status(400).json({ message: "Le pseudo doit contenir au moins 2 caractères." });
+        return;
+    }
+    await ensureUserPseudoCooldownSchema();
+    const currentUser = await findUserById(userId);
+    if (!currentUser) {
+        res.status(404).json({ message: "Utilisateur introuvable." });
+        return;
+    }
+    const pseudoChanged = normalizedPseudo !== currentUser.pseudo;
+    const nextPseudoChangeAt = getPseudoNextChangeAt(currentUser.pseudo_last_changed_at);
+    const pseudoChangeBlocked = pseudoChanged && Boolean(nextPseudoChangeAt);
+    const pseudoToUpdate = pseudoChangeBlocked ? currentUser.pseudo : normalizedPseudo;
     if (payload.avatarUrl && !isImgurAvatarUrl(payload.avatarUrl)) {
         res.status(400).json({
             message: "L'avatar doit être hébergé sur Imgur et finir par .jpg, .jpeg, .png ou .gif."
@@ -92,7 +128,7 @@ export async function patchProfile(req, res) {
         return;
     }
     await updateProfile(userId, {
-        pseudo: payload.pseudo,
+        pseudo: pseudoToUpdate,
         bio: payload.bio,
         avatarUrl: payload.avatarUrl || undefined,
         discordUrl: payload.discordUrl || undefined,
@@ -105,7 +141,16 @@ export async function patchProfile(req, res) {
         snapchatUrl: payload.snapchatUrl || undefined,
         tiktokUrl: payload.tiktokUrl || undefined
     });
-    res.json({ message: "Profil mis à jour." });
+    res.json({
+        message: pseudoChangeBlocked
+            ? "Profil mis à jour. Le pseudo reste verrouillé pendant 60 jours."
+            : "Profil mis à jour.",
+        pseudo_next_change_at: pseudoChangeBlocked
+            ? nextPseudoChangeAt
+            : pseudoChanged
+                ? new Date(Date.now() + PSEUDO_CHANGE_COOLDOWN_MS).toISOString()
+                : nextPseudoChangeAt
+    });
 }
 export async function toggle2FA(req, res) {
     const userId = req.user?.sub;

@@ -27,7 +27,10 @@ import {
   creditAdminUserBalance,
   debitAdminUserBalance,
   createFakeData,
-  deleteFakeData
+  deleteFakeData,
+  getAdminCertifications,
+  acceptAdminCertification,
+  rejectAdminCertification
 } from "../controllers/adminController.js";
 import {
   deleteAdminBlogCategory,
@@ -65,6 +68,9 @@ adminRoutes.post("/users/:userId/disable-2fa", disableUserTwoFactor);
 adminRoutes.post("/users/:userId/credit-balance", creditAdminUserBalance);
 adminRoutes.post("/users/:userId/debit-balance", debitAdminUserBalance);
 adminRoutes.get("/servers", getAdminServers);
+adminRoutes.get("/certifications", getAdminCertifications);
+adminRoutes.post("/certifications/:requestId/accept", acceptAdminCertification);
+adminRoutes.post("/certifications/:requestId/reject", rejectAdminCertification);
 adminRoutes.get("/promo-codes", getAdminPromoCodes);
 adminRoutes.get("/subscriptions", getAdminSubscriptions);
 adminRoutes.get("/billing", getAdminBilling);

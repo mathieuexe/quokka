@@ -1,4 +1,5 @@
 import "express-async-errors";
+import compression from "compression";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -14,6 +15,8 @@ import { systemRoutes } from "./routes/systemRoutes.js";
 import { userRoutes } from "./routes/userRoutes.js";
 import { chatRoutes } from "./routes/chatRoutes.js";
 import { ticketRoutes } from "./routes/ticketRoutes.js";
+import { blogRoutes } from "./routes/blogRoutes.js";
+import { handleDiscordCallback } from "./controllers/authController.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { maintenanceGuard } from "./middleware/maintenance.js";
 export const app = express();
@@ -34,10 +37,13 @@ app.use(cors({
     },
     credentials: true
 }));
+app.use(compression());
 app.post("/api/payments/webhook", express.raw({ type: "application/json" }), stripeWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(maintenanceGuard);
-app.use("/uploads", express.static(join(process.cwd(), "uploads")));
+app.use("/uploads", express.static(join(process.cwd(), "uploads"), { maxAge: "7d", immutable: true }));
+app.get("/discord/callback", handleDiscordCallback);
+app.post("/discord/callback", handleDiscordCallback);
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/servers", serverRoutes);
@@ -47,5 +53,6 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/blog", blogRoutes);
 app.use(notFound);
 app.use(errorHandler);

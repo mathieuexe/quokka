@@ -3,7 +3,12 @@ let chatSchemaReady = null;
 async function ensureChatSchema() {
     if (!chatSchemaReady) {
         chatSchemaReady = (async () => {
-            await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+            try {
+                await db.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+            }
+            catch (error) {
+                console.error("pgcrypto extension unavailable:", error instanceof Error ? error.message : error);
+            }
             await db.query(`
           CREATE TABLE IF NOT EXISTS chat_settings (
             id int PRIMARY KEY,
@@ -32,6 +37,12 @@ async function ensureChatSchema() {
             await db.query(`
           CREATE TABLE IF NOT EXISTS chat_presence (
             user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            last_seen timestamptz NOT NULL DEFAULT NOW()
+          )
+        `);
+            await db.query(`
+          CREATE TABLE IF NOT EXISTS chat_guest_presence (
+            guest_pseudo text PRIMARY KEY,
             last_seen timestamptz NOT NULL DEFAULT NOW()
           )
         `);
@@ -182,6 +193,10 @@ export async function upsertChatPresence(userId) {
     await ensureChatSchema();
     await db.query("INSERT INTO chat_presence (user_id, last_seen) VALUES ($1, NOW()) ON CONFLICT (user_id) DO UPDATE SET last_seen = NOW()", [userId]);
 }
+export async function upsertGuestPresence(guestPseudo) {
+    await ensureChatSchema();
+    await db.query("INSERT INTO chat_guest_presence (guest_pseudo, last_seen) VALUES ($1, NOW()) ON CONFLICT (guest_pseudo) DO UPDATE SET last_seen = NOW()", [guestPseudo]);
+}
 export async function deleteChatPresence(userId) {
     await ensureChatSchema();
     await db.query("DELETE FROM chat_presence WHERE user_id = $1", [userId]);
@@ -189,7 +204,7 @@ export async function deleteChatPresence(userId) {
 export async function listOnlineChatUsers(windowSeconds, limit) {
     await ensureChatSchema();
     const result = await db.query(`
-      SELECT u.id, u.pseudo, u.avatar_url
+      SELECT u.id, u.pseudo, u.avatar_url, u.role, p.last_seen
       FROM users u
       JOIN chat_presence p ON u.id = p.user_id
       WHERE p.last_seen > NOW() - INTERVAL '1 second' * $1
@@ -200,15 +215,11 @@ export async function listOnlineChatUsers(windowSeconds, limit) {
 }
 export async function listOnlineChatGuests(windowSeconds, limit) {
     await ensureChatSchema();
-    // Cette fonction est plus complexe car les invités n'ont pas de présence suivie.
-    // On se base sur les messages récents.
     const result = await db.query(`
-      SELECT DISTINCT user_pseudo as pseudo
-      FROM chat_messages
-      WHERE message_type = 'guest'
-        AND user_pseudo IS NOT NULL
-        AND created_at > NOW() - INTERVAL '1 second' * $1
-      ORDER BY user_pseudo
+      SELECT guest_pseudo as pseudo, last_seen as last_seen_at
+      FROM chat_guest_presence
+      WHERE last_seen > NOW() - INTERVAL '1 second' * $1
+      ORDER BY guest_pseudo
       LIMIT $2
     `, [windowSeconds, limit]);
     return result.rows;

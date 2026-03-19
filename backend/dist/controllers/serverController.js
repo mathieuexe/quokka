@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { createServer, deleteServer, getCategoryById, getServerById, getServerOwner, increaseView, listCategories, listServersByPriority, updateServer } from "../repositories/serverRepository.js";
+import { createCertificationRequest, getLatestCertificationRequestByServer } from "../repositories/certificationRepository.js";
 import { ensureMonthlyLikesReset, VoteRuleError, voteForServer } from "../repositories/voteRepository.js";
 import { verifyAccessToken } from "../utils/jwt.js";
+import { insertAdminNotification } from "../repositories/notificationRepository.js";
 const addServerSchema = z.object({
     categoryId: z.string().uuid(),
     name: z.string().min(2).max(120),
@@ -25,6 +27,11 @@ const updateServerSchema = z.object({
     inviteLink: z.string().url().optional(),
     bannerUrl: z.string().url().optional().or(z.literal("")),
     isPublic: z.boolean().default(true)
+});
+const certificationRequestSchema = z.object({
+    presentation: z.string().min(20).max(5000),
+    socialLinks: z.string().optional(),
+    attachments: z.array(z.string().url()).optional()
 });
 const COMMUNITY_SLUGS = new Set(["discord", "stoat", "habbo"]);
 function isImgurUrl(url) {
@@ -155,6 +162,17 @@ export async function addServer(req, res) {
         bannerUrl: payload.bannerUrl || undefined,
         isPublic: payload.isPublic
     });
+    try {
+        await insertAdminNotification({
+            type: "server_added",
+            priority: 7,
+            title: `Nouveau serveur ajouté: ${payload.name}`,
+            message: `Catégorie: ${category.slug.toUpperCase()}`,
+            userId,
+            serverId: server.id
+        });
+    }
+    catch { }
     res.status(201).json(server);
 }
 export async function patchServer(req, res) {
@@ -241,4 +259,71 @@ export async function removeServer(req, res) {
     }
     await deleteServer(serverId);
     res.status(204).send();
+}
+export async function getCertificationStatus(req, res) {
+    const user = req.user;
+    const serverId = z.string().uuid().parse(req.params.serverId);
+    if (!user) {
+        res.status(401).json({ message: "Authentification requise." });
+        return;
+    }
+    const ownerId = await getServerOwner(serverId);
+    if (!ownerId) {
+        res.status(404).json({ message: "Serveur introuvable." });
+        return;
+    }
+    if (ownerId !== user.sub && user.role !== "admin") {
+        res.status(403).json({ message: "Accès refusé." });
+        return;
+    }
+    const request = await getLatestCertificationRequestByServer(serverId);
+    res.json({ request });
+}
+export async function requestCertification(req, res) {
+    const user = req.user;
+    const serverId = z.string().uuid().parse(req.params.serverId);
+    if (!user) {
+        res.status(401).json({ message: "Authentification requise." });
+        return;
+    }
+    const ownerId = await getServerOwner(serverId);
+    if (!ownerId) {
+        res.status(404).json({ message: "Serveur introuvable." });
+        return;
+    }
+    if (ownerId !== user.sub) {
+        res.status(403).json({ message: "Accès refusé." });
+        return;
+    }
+    const currentServer = await getServerById(serverId);
+    if (currentServer?.verified) {
+        res.status(400).json({ message: "Le serveur est déjà certifié." });
+        return;
+    }
+    const latestRequest = await getLatestCertificationRequestByServer(serverId);
+    if (latestRequest) {
+        if (latestRequest.status === "pending") {
+            res.status(400).json({ message: "Une demande de certification est déjà en cours." });
+            return;
+        }
+        if (latestRequest.status === "rejected") {
+            const rejectedAt = new Date(latestRequest.updated_at);
+            const now = new Date();
+            const diffTime = Math.abs(now.getTime() - rejectedAt.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays < 60) {
+                res.status(400).json({ message: `Vous devez attendre 60 jours après un refus. (Il reste ${60 - diffDays} jours)` });
+                return;
+            }
+        }
+    }
+    const payload = certificationRequestSchema.parse(req.body);
+    const request = await createCertificationRequest({
+        serverId,
+        userId: user.sub,
+        presentation: payload.presentation,
+        socialLinks: payload.socialLinks,
+        attachments: payload.attachments
+    });
+    res.status(201).json({ message: "Demande de certification soumise.", id: request.id });
 }

@@ -39,6 +39,7 @@ export function AdminLayout(): JSX.Element {
             <span className="admin-nav-title">Gestion</span>
             <NavLink to="/admin/users">Utilisateurs</NavLink>
             <NavLink to="/admin/servers">Serveurs</NavLink>
+            <NavLink to="/admin/certifications">Certifications</NavLink>
             <NavLink to="/admin/subscriptions">Abonnements</NavLink>
             <NavLink to="/admin/tickets">Tickets</NavLink>
           </div>

@@ -320,6 +320,48 @@ export async function setStripePaymentPromotionWindow(input) {
       WHERE checkout_session_id = $1
     `, [input.checkoutSessionId, input.startDate.toISOString(), input.endDate.toISOString()]);
 }
+export async function createBalanceTopup(input) {
+    await db.query(`
+      INSERT INTO balance_topups (checkout_session_id, user_id, amount_cents, status)
+      VALUES ($1, $2, $3, 'pending')
+      ON CONFLICT (checkout_session_id) DO NOTHING
+    `, [input.checkoutSessionId, input.userId, input.amountCents]);
+}
+export async function markBalanceTopupCompleted(checkoutSessionId) {
+    const result = await db.query(`
+      UPDATE balance_topups
+      SET status = 'completed',
+          completed_at = NOW()
+      WHERE checkout_session_id = $1
+        AND status = 'pending'
+      RETURNING user_id, amount_cents
+    `, [checkoutSessionId]);
+    return result.rows[0] ?? null;
+}
+export async function createBalancePayment(input) {
+    const checkoutSessionId = `balance_${randomUUID()}`;
+    const result = await db.query(`
+      INSERT INTO stripe_payments (
+        checkout_session_id, payment_intent_id, user_id, server_id,
+        subscription_type, planned_start_date, duration_days, duration_hours,
+        promotion_start_date, promotion_end_date, amount_cents, status
+      )
+      VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'completed')
+      RETURNING id
+    `, [
+        checkoutSessionId,
+        input.userId,
+        input.serverId,
+        input.subscriptionType,
+        input.plannedStartDate.toISOString(),
+        input.durationDays,
+        input.durationHours,
+        input.promotionStartDate.toISOString(),
+        input.promotionEndDate.toISOString(),
+        input.amountCents
+    ]);
+    return { checkoutSessionId, paymentId: result.rows[0]?.id ?? checkoutSessionId };
+}
 export async function createGiftedStripePayment(input) {
     const checkoutSessionId = `gift_${randomUUID()}`;
     const result = await db.query(`

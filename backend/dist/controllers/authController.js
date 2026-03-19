@@ -2,10 +2,14 @@ import { randomBytes, createHmac } from "crypto";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
-import { createUser, findUserByEmail, findUserById, updateLastLogin, isUserAmongFirst100, getBadgeIdBySlug, assignBadgeToUser, findUserByDiscordId, createUserFromDiscord, updateDiscordUserRecord, updateUserAvatarIfMissing, findUserByPseudo } from "../repositories/userRepository.js";
+import { createUser, findUserByEmail, findUserById, updateLastLogin, isUserAmongFirst100, getBadgeIdBySlug, assignBadgeToUser, findUserByDiscordId, createUserFromDiscord, updateDiscordUserRecord, updateUserAvatarIfMissing, findUserByPseudo, insertUserIpEvent } from "../repositories/userRepository.js";
+import { getRequestIp, resolveIpTrace } from "../middleware/auth.js";
 import { signAccessToken } from "../utils/jwt.js";
 import { createVerificationCode, findVerificationCode, markVerificationCodeAsUsed, markEmailAsVerified, createTwoFactorCode, findTwoFactorCode, markTwoFactorCodeAsUsed, isTwoFactorEnabled } from "../repositories/verificationRepository.js";
-import { sendEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate } from "../services/emailService.js";
+import { sendEmail, sendHtmlEmail, generateVerificationCode, generateVerificationEmailTemplate, generate2FAEmailTemplate, generateLoginAlertTemplate } from "../services/emailService.js";
+import { generateCustomerReference } from "../utils/references.js";
+import { insertAdminNotification } from "../repositories/notificationRepository.js";
+import { getMaintenanceSettings } from "../repositories/systemRepository.js";
 const registerSchema = z
     .object({
     pseudo: z.string().min(2).max(60),
@@ -35,7 +39,7 @@ const resendCodeSchema = z.object({
     type: z.enum(["verification", "2fa"])
 });
 const discordCallbackSchema = z.object({
-    code: z.string().min(1),
+    code: z.string().min(1).optional(),
     state: z.string().optional()
 });
 const discordUserSchema = z.object({
@@ -87,6 +91,14 @@ function normalizePseudo(value) {
     const trimmed = value.trim().replace(/\s+/g, "");
     return trimmed.slice(0, 60) || "discord-user";
 }
+function getDiscordRedirectUris() {
+    const candidates = [
+        env.DISCORD_REDIRECT_URI,
+        env.FRONTEND_URL ? `${env.FRONTEND_URL}/api/auth/discord/callback` : undefined,
+        env.FRONTEND_URL ? `${env.FRONTEND_URL}/auth/discord/callback` : undefined
+    ].filter((value) => Boolean(value));
+    return Array.from(new Set(candidates));
+}
 async function generateUniquePseudo(base) {
     let candidate = normalizePseudo(base);
     const baseValue = candidate;
@@ -102,6 +114,30 @@ async function generateUniquePseudo(base) {
     }
     return candidate;
 }
+async function sendLoginAlertEmail(params) {
+    const locationParts = [params.ipTrace.city, params.ipTrace.country].filter(Boolean);
+    const location = locationParts.length > 0 ? locationParts.join(", ") : "Localisation inconnue";
+    const userAgent = typeof params.req.headers["user-agent"] === "string" ? params.req.headers["user-agent"] : "Navigateur inconnu";
+    const ip = params.ipTrace.ip ?? "IP inconnue";
+    const provider = params.ipTrace.provider ?? "Fournisseur inconnu";
+    const customerReference = generateCustomerReference(params.user.pseudo, params.user.id);
+    const loginAt = new Date().toLocaleString("fr-FR");
+    const template = generateLoginAlertTemplate({
+        pseudo: params.user.pseudo,
+        customerReference,
+        loginAt,
+        location,
+        ip,
+        userAgent,
+        provider
+    });
+    await sendHtmlEmail({
+        to: params.user.email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text
+    });
+}
 export async function register(req, res) {
     const payload = registerSchema.parse(req.body);
     const existing = await findUserByEmail(payload.email);
@@ -116,6 +152,29 @@ export async function register(req, res) {
         passwordHash,
         language: payload.language
     });
+    try {
+        await insertAdminNotification({
+            type: "user_registered",
+            priority: 6,
+            title: `Nouvel utilisateur inscrit: ${user.pseudo}`,
+            message: `Email: ${user.email}`,
+            userId: user.id
+        });
+    }
+    catch { }
+    try {
+        const ipTrace = await resolveIpTrace(getRequestIp(req));
+        await insertUserIpEvent({
+            userId: user.id,
+            eventType: "register",
+            ip: ipTrace.ip,
+            provider: ipTrace.provider,
+            country: ipTrace.country,
+            region: ipTrace.region,
+            city: ipTrace.city
+        });
+    }
+    catch { }
     try {
         const isAmongFirst100 = await isUserAmongFirst100(user.id);
         if (isAmongFirst100) {
@@ -186,6 +245,20 @@ export async function login(req, res) {
     }
     else {
         await updateLastLogin(user.id);
+        try {
+            const ipTrace = await resolveIpTrace(getRequestIp(req));
+            await insertUserIpEvent({
+                userId: user.id,
+                eventType: "login",
+                ip: ipTrace.ip,
+                provider: ipTrace.provider,
+                country: ipTrace.country,
+                region: ipTrace.region,
+                city: ipTrace.city
+            });
+            await sendLoginAlertEmail({ user, req, ipTrace });
+        }
+        catch { }
         const token = signAccessToken({
             sub: user.id,
             email: user.email,
@@ -200,7 +273,9 @@ export async function login(req, res) {
                 avatar_url: user.avatar_url,
                 email_verified: user.email_verified,
                 two_factor_enabled: user.two_factor_enabled,
-                role: user.role
+                role: user.role,
+                balance_cents: user.balance_cents,
+                last_balance_update: user.last_balance_update
             }
         });
     }
@@ -234,7 +309,9 @@ export async function verifyEmail(req, res) {
             avatar_url: user.avatar_url,
             email_verified: true,
             two_factor_enabled: user.two_factor_enabled,
-            role: user.role
+            role: user.role,
+            balance_cents: user.balance_cents,
+            last_balance_update: user.last_balance_update
         }
     });
 }
@@ -252,6 +329,20 @@ export async function verify2FA(req, res) {
         return;
     }
     await updateLastLogin(user.id);
+    try {
+        const ipTrace = await resolveIpTrace(getRequestIp(req));
+        await insertUserIpEvent({
+            userId: user.id,
+            eventType: "login",
+            ip: ipTrace.ip,
+            provider: ipTrace.provider,
+            country: ipTrace.country,
+            region: ipTrace.region,
+            city: ipTrace.city
+        });
+        await sendLoginAlertEmail({ user, req, ipTrace, language: user.language });
+    }
+    catch { }
     const token = signAccessToken({
         sub: user.id,
         email: user.email,
@@ -267,7 +358,9 @@ export async function verify2FA(req, res) {
             avatar_url: user.avatar_url,
             email_verified: user.email_verified,
             two_factor_enabled: user.two_factor_enabled,
-            role: user.role
+            role: user.role,
+            balance_cents: user.balance_cents,
+            last_balance_update: user.last_balance_update
         }
     });
 }
@@ -304,13 +397,19 @@ export async function resendCode(req, res) {
     }
 }
 export async function startDiscordLogin(_req, res) {
-    if (!env.DISCORD_CLIENT_ID || !env.DISCORD_REDIRECT_URI) {
+    const maintenance = await getMaintenanceSettings();
+    if (maintenance.discord_auth_enabled) {
+        res.status(503).json({ message: maintenance.discord_auth_message || "Connexion Discord en maintenance." });
+        return;
+    }
+    const redirectUris = getDiscordRedirectUris();
+    if (!env.DISCORD_CLIENT_ID || redirectUris.length === 0) {
         res.status(500).json({ message: "Configuration Discord manquante." });
         return;
     }
     const params = new URLSearchParams({
         client_id: env.DISCORD_CLIENT_ID,
-        redirect_uri: env.DISCORD_REDIRECT_URI,
+        redirect_uri: redirectUris[0],
         response_type: "code",
         scope: "identify email"
     });
@@ -320,34 +419,65 @@ export async function startDiscordLogin(_req, res) {
     res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
 }
 export async function handleDiscordCallback(req, res) {
-    // ✅ Lecture depuis req.query (GET) au lieu de req.body (POST)
-    const payload = discordCallbackSchema.parse(req.query);
+    const maintenance = await getMaintenanceSettings();
+    if (maintenance.discord_auth_enabled) {
+        res.status(503).json({ message: maintenance.discord_auth_message || "Connexion Discord en maintenance." });
+        return;
+    }
+    const payload = discordCallbackSchema.parse({
+        code: typeof req.body?.code === "string"
+            ? req.body.code
+            : typeof req.query.code === "string"
+                ? req.query.code
+                : undefined,
+        state: typeof req.body?.state === "string"
+            ? req.body.state
+            : typeof req.query.state === "string"
+                ? req.query.state
+                : undefined
+    });
+    if (!payload.code) {
+        if (req.method === "GET") {
+            res.redirect("/api/auth/discord");
+            return;
+        }
+        res.status(400).json({ message: "Code Discord manquant." });
+        return;
+    }
     if (env.DISCORD_SESSION_SECRET && !verifyDiscordState(env.DISCORD_SESSION_SECRET, payload.state)) {
         res.status(400).json({ message: "Session Discord expirée ou invalide." });
         return;
     }
-    if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.DISCORD_REDIRECT_URI) {
+    const redirectUris = getDiscordRedirectUris();
+    if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || redirectUris.length === 0) {
         res.status(500).json({ message: "Configuration Discord manquante." });
         return;
     }
-    const tokenParams = new URLSearchParams({
-        client_id: env.DISCORD_CLIENT_ID,
-        client_secret: env.DISCORD_CLIENT_SECRET,
-        grant_type: "authorization_code",
-        code: payload.code,
-        redirect_uri: env.DISCORD_REDIRECT_URI
-    });
-    const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: tokenParams.toString()
-    });
-    if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text();
-        res.status(401).json({ message: "Échec de la connexion Discord.", error: errorText });
+    let tokenData = null;
+    let lastErrorText = null;
+    for (const redirectUri of redirectUris) {
+        const tokenParams = new URLSearchParams({
+            client_id: env.DISCORD_CLIENT_ID,
+            client_secret: env.DISCORD_CLIENT_SECRET,
+            grant_type: "authorization_code",
+            code: payload.code,
+            redirect_uri: redirectUri
+        });
+        const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: tokenParams.toString()
+        });
+        if (tokenResponse.ok) {
+            tokenData = (await tokenResponse.json());
+            break;
+        }
+        lastErrorText = await tokenResponse.text();
+    }
+    if (!tokenData) {
+        res.status(401).json({ message: "Échec de la connexion Discord.", error: lastErrorText ?? undefined });
         return;
     }
-    const tokenData = (await tokenResponse.json());
     const userResponse = await fetch("https://discord.com/api/users/@me", {
         headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
@@ -359,11 +489,11 @@ export async function handleDiscordCallback(req, res) {
     const discordUserRaw = (await userResponse.json());
     const discordUser = discordUserSchema.parse(discordUserRaw);
     const discordAvatarUrl = getDiscordAvatarUrl(discordUser);
-    const pseudoBase = discordUser.global_name ?? discordUser.username;
-    const pseudo = await generateUniquePseudo(pseudoBase);
-    const email = discordUser.email ?? `discord-${discordUser.id}@users.discord`;
     let user = await findUserByDiscordId(discordUser.id);
     if (!user) {
+        const pseudoBase = discordUser.global_name ?? discordUser.username;
+        const pseudo = await generateUniquePseudo(pseudoBase);
+        const email = discordUser.email ?? `discord-${discordUser.id}@users.discord`;
         const passwordHash = await hashPassword(randomBytes(32).toString("hex"));
         user = await createUserFromDiscord({
             pseudo,
@@ -378,38 +508,71 @@ export async function handleDiscordCallback(req, res) {
             discordLocale: discordUser.locale ?? null,
             discordProfile: discordUserRaw
         });
-        try {
-            const isAmongFirst100 = await isUserAmongFirst100(user.id);
-            if (isAmongFirst100) {
-                const badgeId = await getBadgeIdBySlug("100_premiers_utilisateurs");
-                if (badgeId) {
-                    await assignBadgeToUser(user.id, badgeId);
+        void (async () => {
+            try {
+                await insertAdminNotification({
+                    type: "user_registered",
+                    priority: 6,
+                    title: `Nouvel utilisateur inscrit: ${user.pseudo}`,
+                    message: `Email: ${user.email}`,
+                    userId: user.id
+                });
+            }
+            catch { }
+            try {
+                const isAmongFirst100 = await isUserAmongFirst100(user.id);
+                if (isAmongFirst100) {
+                    const badgeId = await getBadgeIdBySlug("100_premiers_utilisateurs");
+                    if (badgeId) {
+                        await assignBadgeToUser(user.id, badgeId);
+                    }
                 }
             }
-        }
-        catch (error) {
-            console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
-        }
+            catch (error) {
+                console.error("Erreur lors de l'attribution du badge '100 premiers utilisateurs':", error);
+            }
+        })();
     }
     else {
-        await updateDiscordUserRecord({
-            userId: user.id,
-            discordId: discordUser.id,
-            discordUsername: discordUser.username,
-            discordAvatarUrl,
-            discordEmail: discordUser.email ?? null,
-            discordLocale: discordUser.locale ?? null,
-            discordProfile: discordUserRaw
-        });
-        await updateUserAvatarIfMissing(user.id, discordAvatarUrl);
+        void Promise.all([
+            updateDiscordUserRecord({
+                userId: user.id,
+                discordId: discordUser.id,
+                discordUsername: discordUser.username,
+                discordAvatarUrl,
+                discordEmail: discordUser.email ?? null,
+                discordLocale: discordUser.locale ?? null,
+                discordProfile: discordUserRaw
+            }),
+            updateUserAvatarIfMissing(user.id, discordAvatarUrl)
+        ]);
     }
-    await updateLastLogin(user.id);
+    void updateLastLogin(user.id);
+    void (async () => {
+        try {
+            const ipTrace = await resolveIpTrace(getRequestIp(req));
+            await insertUserIpEvent({
+                userId: user.id,
+                eventType: "login",
+                ip: ipTrace.ip,
+                provider: ipTrace.provider,
+                country: ipTrace.country,
+                region: ipTrace.region,
+                city: ipTrace.city
+            });
+            await sendLoginAlertEmail({ user, req, ipTrace, language: user.language });
+        }
+        catch { }
+    })();
     const token = signAccessToken({
         sub: user.id,
         email: user.email,
         role: user.role
     });
-    // ✅ Redirection vers le frontend avec le token en paramètre
+    if (req.method === "POST") {
+        res.json({ token, user });
+        return;
+    }
     const frontendUrl = env.FRONTEND_URL ?? "https://quokka.gg";
     res.redirect(`${frontendUrl}/auth/discord/success?token=${token}`);
 }

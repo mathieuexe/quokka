@@ -331,6 +331,10 @@ export async function setServerHidden(serverId: string, isHidden: boolean): Prom
   await db.query("UPDATE servers SET is_hidden = $2, updated_at = NOW() WHERE id = $1", [serverId, isHidden]);
 }
 
+export async function setServerVerified(serverId: string, verified: boolean): Promise<void> {
+  await db.query("UPDATE servers SET verified = $2, updated_at = NOW() WHERE id = $1", [serverId, verified]);
+}
+
 export async function getServerOwner(serverId: string): Promise<string | null> {
   const result = await db.query<{ user_id: string }>("SELECT user_id FROM servers WHERE id = $1 LIMIT 1", [serverId]);
   return result.rows[0]?.user_id ?? null;

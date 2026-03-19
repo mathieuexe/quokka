@@ -1,4 +1,25 @@
 import { db } from "../config/db.js";
+let serverFlagsReady = null;
+async function ensureServerFlagsSchema() {
+    if (!serverFlagsReady) {
+        serverFlagsReady = (async () => {
+            try {
+                await db.query(`
+            CREATE TABLE IF NOT EXISTS server_flags (
+              server_id uuid PRIMARY KEY REFERENCES servers(id) ON DELETE CASCADE,
+              is_fake boolean NOT NULL DEFAULT FALSE,
+              created_at timestamptz NOT NULL DEFAULT NOW()
+            )
+          `);
+                await db.query("CREATE INDEX IF NOT EXISTS idx_server_flags_is_fake ON server_flags(is_fake)");
+            }
+            catch (error) {
+                console.error("Server flags schema init failed:", error);
+            }
+        })();
+    }
+    await serverFlagsReady;
+}
 const BASE_SERVER_QUERY = `
   WITH server_refs AS (
     SELECT
@@ -133,6 +154,39 @@ export async function createServer(input) {
     await db.query("INSERT INTO stats (server_id) VALUES ($1) ON CONFLICT (server_id) DO NOTHING", [serverId]);
     return { id: serverId };
 }
+export async function markServerAsFake(serverId) {
+    await ensureServerFlagsSchema();
+    await db.query(`
+      INSERT INTO server_flags (server_id, is_fake)
+      VALUES ($1, TRUE)
+      ON CONFLICT (server_id)
+      DO UPDATE SET is_fake = TRUE
+    `, [serverId]);
+}
+export async function listFakeServerIdsByServerIds(serverIds) {
+    if (serverIds.length === 0)
+        return new Set();
+    await ensureServerFlagsSchema();
+    const result = await db.query(`
+      SELECT server_id
+      FROM server_flags
+      WHERE is_fake = TRUE
+        AND server_id = ANY($1::uuid[])
+    `, [serverIds]);
+    return new Set(result.rows.map((row) => row.server_id));
+}
+export async function deleteServersByFakeFlag() {
+    await ensureServerFlagsSchema();
+    const result = await db.query(`
+      DELETE FROM servers
+      WHERE id IN (
+        SELECT server_id
+        FROM server_flags
+        WHERE is_fake = TRUE
+      )
+    `);
+    return result.rowCount ?? 0;
+}
 export async function listCategories() {
     const result = await db.query("SELECT id, slug, label, image_url FROM categories ORDER BY label ASC");
     return result.rows;
@@ -171,6 +225,9 @@ export async function setServerVisibility(serverId, isVisible) {
 export async function setServerHidden(serverId, isHidden) {
     await db.query("UPDATE servers SET is_hidden = $2, updated_at = NOW() WHERE id = $1", [serverId, isHidden]);
 }
+export async function setServerVerified(serverId, verified) {
+    await db.query("UPDATE servers SET verified = $2, updated_at = NOW() WHERE id = $1", [serverId, verified]);
+}
 export async function getServerOwner(serverId) {
     const result = await db.query("SELECT user_id FROM servers WHERE id = $1 LIMIT 1", [serverId]);
     return result.rows[0]?.user_id ?? null;
@@ -206,6 +263,10 @@ export async function updateServer(serverId, input) {
 }
 export async function deleteServer(serverId) {
     await db.query("DELETE FROM servers WHERE id = $1", [serverId]);
+}
+export async function deleteServersByDescriptionMarker(marker) {
+    const result = await db.query("DELETE FROM servers WHERE description LIKE $1", [`%${marker}%`]);
+    return result.rowCount ?? 0;
 }
 export async function updateServerAsAdmin(serverId, input) {
     await db.query(`
