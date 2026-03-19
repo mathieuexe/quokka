@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
+import NodeCache from "node-cache";
 import {
   createServer,
   deleteServer,
@@ -50,6 +51,9 @@ const certificationRequestSchema = z.object({
 
 const COMMUNITY_SLUGS = new Set(["discord", "stoat", "habbo"]);
 
+// Cache for heavy requests (1 minute TTL)
+const serverCache = new NodeCache({ stdTTL: 60 });
+
 function isImgurUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -68,7 +72,16 @@ export async function getHomeServers(req: Request, res: Response): Promise<void>
   try {
     await ensureMonthlyLikesReset();
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
+    const cacheKey = search ? `home_servers_${search}` : "home_servers";
+    
+    const cachedServers = serverCache.get(cacheKey);
+    if (cachedServers) {
+      res.json({ servers: cachedServers });
+      return;
+    }
+
     const servers = await listServersByPriority(search);
+    serverCache.set(cacheKey, servers);
     res.json({ servers });
   } catch (error) {
     console.error("Home servers load failed:", error);
@@ -78,7 +91,15 @@ export async function getHomeServers(req: Request, res: Response): Promise<void>
 
 export async function getCategories(_req: Request, res: Response): Promise<void> {
   try {
+    const cacheKey = "categories";
+    const cachedCategories = serverCache.get(cacheKey);
+    if (cachedCategories) {
+      res.json({ categories: cachedCategories });
+      return;
+    }
+
     const categories = await listCategories();
+    serverCache.set(cacheKey, categories, 3600); // cache categories longer (1 hour)
     res.json({ categories });
   } catch (error) {
     console.error("Categories load failed:", error);
@@ -122,6 +143,7 @@ export async function voteServer(req: Request, res: Response): Promise<void> {
 
   try {
     const likes = await voteForServer(serverId, userId);
+    serverCache.flushAll(); // Clear cache when a vote happens
     res.json({ message: "Vote enregistré.", likes });
   } catch (error) {
     if (error instanceof VoteRuleError) {
@@ -270,6 +292,7 @@ export async function patchServer(req: Request, res: Response): Promise<void> {
     bannerUrl: payload.bannerUrl || undefined,
     isPublic: payload.isPublic
   });
+  serverCache.flushAll(); // Clear cache when a server is updated
 
   res.json({ message: "Serveur mis à jour." });
 }
@@ -294,6 +317,7 @@ export async function removeServer(req: Request, res: Response): Promise<void> {
   }
 
   await deleteServer(serverId);
+  serverCache.flushAll(); // Clear cache when a server is deleted
   res.status(204).send();
 }
 
