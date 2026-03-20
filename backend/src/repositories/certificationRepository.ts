@@ -57,7 +57,10 @@ export async function getLatestCertificationRequestByServer(serverId: string): P
   return result.rows[0] ?? null;
 }
 
-export async function listCertificationRequests(status?: string): Promise<ServerCertificationRequest[]> {
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listCertificationRequests(status?: string, page: number = 1, limit: number = 20): Promise<PaginatedResult<ServerCertificationRequest>> {
+  const offset = (page - 1) * limit;
   const params: unknown[] = [];
   let where = "";
 
@@ -65,6 +68,22 @@ export async function listCertificationRequests(status?: string): Promise<Server
     params.push(status);
     where = "WHERE cr.status = $1";
   }
+
+  const countParams = [...params];
+  const countResult = await db.query<{ count: string }>(
+    `
+      SELECT COUNT(*) as count 
+      FROM server_certification_requests cr
+      JOIN servers s ON s.id = cr.server_id
+      JOIN users u ON u.id = cr.user_id
+      ${where}
+    `,
+    countParams
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  params.push(limit);
+  params.push(offset);
 
   const result = await db.query<ServerCertificationRequest>(
     `
@@ -78,10 +97,18 @@ export async function listCertificationRequests(status?: string): Promise<Server
       JOIN users u ON u.id = cr.user_id
       ${where}
       ORDER BY cr.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `,
     params
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function getCertificationRequestById(id: string): Promise<ServerCertificationRequest | null> {

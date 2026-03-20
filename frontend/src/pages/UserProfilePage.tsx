@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "../lib/api";
 import type { Server, User } from "../types";
 
@@ -84,22 +85,21 @@ function setMetaProperty(property: string, content: string): void {
 
 export function UserProfilePage(): JSX.Element {
   const { userId } = useParams();
-  const [data, setData] = useState<PublicUserResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadProfile(): Promise<void> {
-      if (!userId) return;
-      try {
-        const result = await apiRequest<PublicUserResponse>(`/users/${userId}/profile`);
-        setData(result);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Impossible de charger ce profil utilisateur.");
-      }
-    }
+  const {
+    data,
+    isLoading,
+    error: queryError
+  } = useQuery({
+    queryKey: ["userProfile", userId],
+    queryFn: async () => {
+      if (!userId) throw new Error("ID utilisateur manquant");
+      return apiRequest<PublicUserResponse>(`/users/${userId}/profile`);
+    },
+    enabled: !!userId
+  });
 
-    void loadProfile();
-  }, [userId]);
+  const error = queryError ? (queryError instanceof Error ? queryError.message : "Impossible de charger ce profil utilisateur.") : null;
 
   useEffect(() => {
     if (!data?.user) return;

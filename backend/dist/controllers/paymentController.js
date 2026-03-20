@@ -374,14 +374,22 @@ export async function stripeWebhook(req, res) {
     }
     res.status(200).json({ received: true });
 }
+import { paginationSchema } from "../types/pagination.js";
 export async function getMyOrders(req, res) {
     const userId = req.user?.sub;
     if (!userId) {
         res.status(401).json({ message: "Authentification requise." });
         return;
     }
-    const orders = await listUserStripePayments(userId);
-    res.json({ orders });
+    const { page, limit } = paginationSchema.parse(req.query);
+    const ordersPaginated = await listUserStripePayments(userId, page, limit);
+    res.json({
+        data: ordersPaginated.data,
+        total: ordersPaginated.total,
+        page: ordersPaginated.page,
+        limit: ordersPaginated.limit,
+        totalPages: ordersPaginated.totalPages
+    });
 }
 export async function downloadInvoice(req, res) {
     const userId = req.user?.sub;

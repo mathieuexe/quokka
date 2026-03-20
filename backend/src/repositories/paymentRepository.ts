@@ -81,8 +81,10 @@ export async function createPendingStripePayment(input: {
   );
 }
 
-export async function listUserStripePayments(userId: string): Promise<
-  Array<{
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listUserStripePayments(userId: string, page: number = 1, limit: number = 20): Promise<
+  PaginatedResult<{
     id: string;
     order_reference: string;
     checkout_session_id: string;
@@ -103,6 +105,14 @@ export async function listUserStripePayments(userId: string): Promise<
     promo: StripePaymentPromoMeta | null;
   }>
 > {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM stripe_payments WHERE user_id = $1`,
+    [userId]
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const queryWithPromo = `
       SELECT
         p.id,
@@ -136,6 +146,7 @@ export async function listUserStripePayments(userId: string): Promise<
       LEFT JOIN stripe_payment_promos m ON m.checkout_session_id = p.checkout_session_id
       WHERE p.user_id = $1
       ORDER BY p.created_at DESC
+      LIMIT $2 OFFSET $3
     `;
 
   const queryWithoutPromo = `
@@ -166,6 +177,7 @@ export async function listUserStripePayments(userId: string): Promise<
       JOIN servers s ON s.id = p.server_id
       WHERE p.user_id = $1
       ORDER BY p.created_at DESC
+      LIMIT $2 OFFSET $3
     `;
 
   type Row = {
@@ -193,13 +205,13 @@ export async function listUserStripePayments(userId: string): Promise<
 
   let result: { rows: Row[] };
   try {
-    result = await db.query<Row>(queryWithPromo, [userId]);
+    result = await db.query<Row>(queryWithPromo, [userId, limit, offset]);
   } catch (error) {
     if (!isMissingRelationError(error)) throw error;
-    result = await db.query<Row>(queryWithoutPromo, [userId]);
+    result = await db.query<Row>(queryWithoutPromo, [userId, limit, offset]);
   }
 
-  return result.rows.map((row) => ({
+  const mapped = result.rows.map((row) => ({
     ...row,
     promo:
       row.base_amount_cents !== undefined
@@ -212,6 +224,14 @@ export async function listUserStripePayments(userId: string): Promise<
         : null,
     order_reference: generateOrderReference(row.id)
   }));
+
+  return {
+    data: mapped,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function getUserStripePaymentById(paymentId: string, userId: string): Promise<{
@@ -599,8 +619,8 @@ export async function createGiftedStripePayment(input: {
   return { checkoutSessionId, paymentId: result.rows[0]?.id ?? checkoutSessionId };
 }
 
-export async function listAllStripePayments(): Promise<
-  Array<{
+export async function listAllStripePayments(page: number = 1, limit: number = 20): Promise<
+  PaginatedResult<{
     id: string;
     checkout_session_id: string;
     status: "pending" | "completed" | "failed";
@@ -619,6 +639,11 @@ export async function listAllStripePayments(): Promise<
     created_at: string;
   }>
 > {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM stripe_payments`);
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const result = await db.query<{
     id: string;
     checkout_session_id: string;
@@ -659,7 +684,16 @@ export async function listAllStripePayments(): Promise<
       JOIN users u ON u.id = p.user_id
       JOIN servers s ON s.id = p.server_id
       ORDER BY p.created_at DESC
-    `
+      LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }

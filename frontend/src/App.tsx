@@ -4,27 +4,41 @@ import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { EmailVerificationBanner } from "./components/EmailVerificationBanner";
 import { useAuth } from "./context/AuthContext";
-import { HomePage } from "./pages/HomePage";
-import { LegalNoticePage } from "./pages/LegalNoticePage";
 import { AnnouncementSettings, SiteBrandingSettings, getPublicAnnouncementSettings, getPublicBrandingSettings } from "./lib/api";
-const AddServerPage = lazy(() => import("./pages/AddServerPage").then((module) => ({ default: module.AddServerPage })));
-const ChatPage = lazy(() => import("./pages/ChatPage").then((module) => ({ default: module.ChatPage })));
-const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
-const DiscordCallbackPage = lazy(() => import("./pages/DiscordCallbackPage").then((module) => ({ default: module.DiscordCallbackPage })));
-const DiscordSuccess = lazy(() => import("./pages/auth/DiscordSuccess").then((module) => ({ default: module.DiscordSuccess })));
-const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
+import { MaintenanceBanner } from "./components/MaintenanceBanner";
+import { PageLoader } from "./components/ui/PageLoader";
+
+// === Core & Public Pages ===
+const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
+const LegalNoticePage = lazy(() => import("./pages/LegalNoticePage").then((module) => ({ default: module.LegalNoticePage })));
 const MaintenancePage = lazy(() => import("./pages/MaintenancePage").then((module) => ({ default: module.MaintenancePage })));
-const OffersPage = lazy(() => import("./pages/OffersPage").then((module) => ({ default: module.OffersPage })));
-const OrderThankYouPage = lazy(() => import("./pages/OrderThankYouPage").then((module) => ({ default: module.OrderThankYouPage })));
+const ChatPage = lazy(() => import("./pages/ChatPage").then((module) => ({ default: module.ChatPage })));
+
+// === Authentication Pages ===
+const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const RegisterPage = lazy(() => import("./pages/RegisterPage").then((module) => ({ default: module.RegisterPage })));
-const ServerPage = lazy(() => import("./pages/ServerPage").then((module) => ({ default: module.ServerPage })));
-const SubscriptionsPage = lazy(() => import("./pages/SubscriptionsPage").then((module) => ({ default: module.SubscriptionsPage })));
-const TicketsPage = lazy(() => import("./pages/TicketsPage").then((module) => ({ default: module.TicketsPage })));
-const UserProfilePage = lazy(() => import("./pages/UserProfilePage").then((module) => ({ default: module.UserProfilePage })));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage").then((module) => ({ default: module.VerifyEmailPage })));
 const Verify2FAPage = lazy(() => import("./pages/Verify2FAPage").then((module) => ({ default: module.Verify2FAPage })));
+const DiscordCallbackPage = lazy(() => import("./pages/DiscordCallbackPage").then((module) => ({ default: module.DiscordCallbackPage })));
+const DiscordSuccess = lazy(() => import("./pages/auth/DiscordSuccess").then((module) => ({ default: module.DiscordSuccess })));
+
+// === User & Entity Pages ===
+const UserProfilePage = lazy(() => import("./pages/UserProfilePage").then((module) => ({ default: module.UserProfilePage })));
+const ServerPage = lazy(() => import("./pages/ServerPage").then((module) => ({ default: module.ServerPage })));
+const AddServerPage = lazy(() => import("./pages/AddServerPage").then((module) => ({ default: module.AddServerPage })));
+
+// === Dashboard & Commerce Pages ===
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const SubscriptionsPage = lazy(() => import("./pages/SubscriptionsPage").then((module) => ({ default: module.SubscriptionsPage })));
+const TicketsPage = lazy(() => import("./pages/TicketsPage").then((module) => ({ default: module.TicketsPage })));
+const OffersPage = lazy(() => import("./pages/OffersPage").then((module) => ({ default: module.OffersPage })));
+const OrderThankYouPage = lazy(() => import("./pages/OrderThankYouPage").then((module) => ({ default: module.OrderThankYouPage })));
+
+// === Blog Pages ===
 const BlogIndexPage = lazy(() => import("./pages/BlogIndexPage").then((module) => ({ default: module.BlogIndexPage })));
 const BlogPostPage = lazy(() => import("./pages/BlogPostPage").then((module) => ({ default: module.BlogPostPage })));
+
+// === Admin Pages ===
 const AdminLayout = lazy(() => import("./admin/AdminLayout").then((module) => ({ default: module.AdminLayout })));
 const AdminUsersPage = lazy(() => import("./admin/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })));
 const AdminUserDetailsPage = lazy(() => import("./admin/AdminUserDetailsPage").then((module) => ({ default: module.AdminUserDetailsPage })));
@@ -33,9 +47,7 @@ const AdminCertificationsPage = lazy(() => import("./admin/AdminCertificationsPa
 const AdminSettingsPage = lazy(() => import("./admin/AdminSettingsPage").then((module) => ({ default: module.AdminSettingsPage })));
 const AdminSubscriptionsPage = lazy(() => import("./admin/AdminSubscriptionsPage").then((module) => ({ default: module.AdminSubscriptionsPage })));
 const AdminTicketsPage = lazy(() => import("./admin/AdminTicketsPage").then((module) => ({ default: module.AdminTicketsPage })));
-const AdminManualActivationPage = lazy(() =>
-  import("./admin/AdminManualActivationPage").then((module) => ({ default: module.AdminManualActivationPage }))
-);
+const AdminManualActivationPage = lazy(() => import("./admin/AdminManualActivationPage").then((module) => ({ default: module.AdminManualActivationPage })));
 const AdminPromoCodesPage = lazy(() => import("./admin/AdminPromoCodesPage").then((module) => ({ default: module.AdminPromoCodesPage })));
 const AdminWarningsPage = lazy(() => import("./admin/AdminWarningsPage").then((module) => ({ default: module.AdminWarningsPage })));
 const AdminNotificationsPage = lazy(() => import("./admin/AdminNotificationsPage").then((module) => ({ default: module.AdminNotificationsPage })));
@@ -351,7 +363,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     schedulePreload(() => {
-      if (isAdminArea || user?.role === "admin") {
+      if (user?.role === "admin") {
         preloaders.adminLayout();
         preloaders.adminUsers();
         preloaders.adminServers();
@@ -376,12 +388,12 @@ export default function App(): JSX.Element {
         preloaders.chat();
       }
     });
-  }, [isAdminArea, isAuthenticated, location.pathname, user?.role]);
+  }, [isAuthenticated, location.pathname, user?.role]);
 
   if (maintenanceEnabled && !showMaintenanceBanner) {
     return (
       <div className="app-shell">
-        <Suspense fallback={<div className="page">Chargement...</div>}>
+        <Suspense fallback={<PageLoader />}>
           <MaintenancePage branding={branding} />
         </Suspense>
       </div>
@@ -435,7 +447,7 @@ export default function App(): JSX.Element {
       {!isAdminArea && <EmailVerificationBanner />}
       {!isAdminArea && <Header variant="home" branding={branding} />}
       <main className={isAdminArea ? "main-content admin-main-content" : "main-content"}>
-        <Suspense fallback={<div className="page">Chargement...</div>}>
+        <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/chat" element={<ChatPage />} />

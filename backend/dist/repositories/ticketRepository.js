@@ -1,5 +1,8 @@
 import { db } from "../config/db.js";
-export async function listUserTickets(userId) {
+export async function listUserTickets(userId, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const countResult = await db.query(`SELECT COUNT(*) as count FROM tickets WHERE user_id = $1`, [userId]);
+    const total = parseInt(countResult.rows[0].count, 10);
     const result = await db.query(`
       SELECT
         t.id,
@@ -26,10 +29,18 @@ export async function listUserTickets(userId) {
       LEFT JOIN servers s ON s.id = t.server_id
       WHERE t.user_id = $1
       ORDER BY t.last_message_at DESC
-    `, [userId]);
-    return result.rows;
+      LIMIT $2 OFFSET $3
+    `, [userId, limit, offset]);
+    return {
+        data: result.rows,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }
-export async function listAdminTickets(filters) {
+export async function listAdminTickets(filters, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
     const values = [];
     const conditions = [];
     if (filters.status) {
@@ -66,6 +77,16 @@ export async function listAdminTickets(filters) {
         conditions.push(`(t.reference ILIKE $${values.length} OR u.pseudo ILIKE $${values.length})`);
     }
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const countValues = [...values];
+    const countResult = await db.query(`
+      SELECT COUNT(*) as count
+      FROM tickets t
+      JOIN users u ON u.id = t.user_id
+      ${whereClause}
+    `, countValues);
+    const total = parseInt(countResult.rows[0].count, 10);
+    values.push(limit);
+    values.push(offset);
     const result = await db.query(`
       SELECT
         t.id,
@@ -92,8 +113,15 @@ export async function listAdminTickets(filters) {
       LEFT JOIN servers s ON s.id = t.server_id
       ${whereClause}
       ORDER BY t.last_message_at DESC
+      LIMIT $${values.length - 1} OFFSET $${values.length}
     `, values);
-    return result.rows;
+    return {
+        data: result.rows,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }
 export async function getTicketById(ticketId) {
     const result = await db.query(`

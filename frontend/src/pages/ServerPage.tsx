@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
 import type { Server } from "../types";
@@ -48,27 +49,36 @@ function setMetaProperty(property: string, content: string): void {
 export function ServerPage(): JSX.Element {
   const { token, isAuthenticated } = useAuth();
   const { serverId } = useParams();
-  const [server, setServer] = useState<Server | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  
+  const {
+    data: serverData,
+    isLoading: loading,
+    error: queryError
+  } = useQuery({
+    queryKey: ["server", serverId],
+    queryFn: async () => {
+      if (!serverId) throw new Error("ID du serveur manquant");
+      return apiRequest<ServerResponse>(`/servers/${serverId}`, { token });
+    },
+    enabled: !!serverId
+  });
+
+  const [localServer, setLocalServer] = useState<Server | null>(null);
   const [voteMessage, setVoteMessage] = useState<string | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const premiumLabel =
-    server?.premium_type === "quokka_plus" ? "Quokka+" : server?.premium_type === "essentiel" ? "Essentiel" : null;
 
   useEffect(() => {
-    async function loadServer(): Promise<void> {
-      if (!serverId) return;
-      try {
-        const data = await apiRequest<ServerResponse>(`/servers/${serverId}`, { token });
-        setServer(data.server);
-        setLoadError(null);
-      } catch (e) {
-        setLoadError(e instanceof Error ? e.message : "Impossible de charger le serveur.");
-      }
+    if (serverData?.server) {
+      setLocalServer(serverData.server);
     }
-    void loadServer();
-  }, [serverId, token]);
+  }, [serverData]);
+
+  const server = localServer || serverData?.server;
+  const loadError = queryError ? (queryError instanceof Error ? queryError.message : "Impossible de charger le serveur.") : null;
+
+  const premiumLabel =
+    server?.premium_type === "quokka_plus" ? "Quokka+" : server?.premium_type === "essentiel" ? "Essentiel" : null;
 
   useEffect(() => {
     if (!server) return;
@@ -141,7 +151,9 @@ export function ServerPage(): JSX.Element {
         method: "POST",
         token
       });
-      setServer((current) => (current ? { ...current, likes: response.likes } : current));
+      if (localServer) {
+        setLocalServer({ ...localServer, likes: response.likes });
+      }
       setVoteMessage("Vote enregistré.");
       setVoteError(null);
       window.setTimeout(() => setVoteMessage(null), 1800);

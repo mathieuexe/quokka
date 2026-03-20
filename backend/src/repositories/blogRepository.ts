@@ -79,7 +79,14 @@ export async function deleteBlogCategory(categoryId: string): Promise<void> {
   await db.query("DELETE FROM blog_categories WHERE id = $1", [categoryId]);
 }
 
-export async function listBlogPostsAdmin(): Promise<BlogPostRecord[]> {
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listBlogPostsAdmin(page: number = 1, limit: number = 20): Promise<PaginatedResult<BlogPostRecord>> {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>(`SELECT COUNT(*) as count FROM blog_posts`);
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const result = await db.query<BlogPostRecord>(
     `
       SELECT
@@ -98,9 +105,17 @@ export async function listBlogPostsAdmin(): Promise<BlogPostRecord[]> {
       FROM blog_posts p
       LEFT JOIN blog_categories c ON c.id = p.category_id
       ORDER BY p.created_at DESC
-    `
+      LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
-  return result.rows;
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function getBlogPostById(postId: string): Promise<BlogPostRecord | null> {
@@ -222,14 +237,30 @@ export async function deleteBlogPost(postId: string): Promise<void> {
   await db.query("DELETE FROM blog_posts WHERE id = $1", [postId]);
 }
 
-export async function listPublishedBlogPosts(categorySlug?: string): Promise<BlogPostRecord[]> {
-  const params: string[] = [];
+export async function listPublishedBlogPosts(categorySlug?: string, page: number = 1, limit: number = 20): Promise<PaginatedResult<BlogPostRecord>> {
+  const offset = (page - 1) * limit;
+  const params: unknown[] = [];
   const clauses = ["p.status = 'published'"];
   if (categorySlug) {
     params.push(categorySlug);
     clauses.push(`c.slug = $${params.length}`);
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  const countParams = [...params];
+  const countResult = await db.query<{ count: string }>(
+    `
+      SELECT COUNT(*) as count 
+      FROM blog_posts p 
+      LEFT JOIN blog_categories c ON c.id = p.category_id 
+      ${where}
+    `,
+    countParams
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  params.push(limit);
+  params.push(offset);
 
   const result = await db.query<BlogPostRecord>(
     `
@@ -250,10 +281,17 @@ export async function listPublishedBlogPosts(categorySlug?: string): Promise<Blo
       LEFT JOIN blog_categories c ON c.id = p.category_id
       ${where}
       ORDER BY p.published_at DESC, p.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `,
     params
   );
-  return result.rows;
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function getPublishedBlogPostBySlug(slug: string): Promise<BlogPostRecord | null> {

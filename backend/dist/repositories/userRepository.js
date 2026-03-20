@@ -305,7 +305,10 @@ export async function updateProfile(userId, input) {
       WHERE id = $1
     `, values);
 }
-export async function listUsers() {
+export async function listUsers(page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const countResult = await db.query("SELECT COUNT(*) as count FROM users");
+    const total = parseInt(countResult.rows[0].count, 10);
     const result = await db.query(`
       SELECT
         u.id,
@@ -338,11 +341,60 @@ export async function listUsers() {
       LEFT JOIN badges b ON b.id = ub.badge_id
       GROUP BY u.id
       ORDER BY u.created_at DESC
-    `);
-    return result.rows.map((row) => ({
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+    return {
+        data: result.rows.map((row) => ({
+            ...row,
+            badges: Array.isArray(row.badges) ? row.badges : []
+        })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
+}
+export async function getAdminUserById(id) {
+    const result = await db.query(`
+      SELECT
+        u.id,
+        u.pseudo,
+        u.email,
+        u.bio,
+        u.internal_note,
+        u.avatar_url,
+        u.role,
+        u.created_at,
+        u.email_verified,
+        u.two_factor_enabled,
+        u.language,
+        u.balance_cents,
+        u.last_balance_update,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', b.id,
+              'slug', b.slug,
+              'label', b.label,
+              'image_url', b.image_url
+            )
+            ORDER BY ${BADGE_DISPLAY_ORDER_SQL_WITH_ALIAS}, b.label ASC
+          ) FILTER (WHERE b.id IS NOT NULL),
+          '[]'::json
+        ) AS badges
+      FROM users u
+      LEFT JOIN user_badges ub ON ub.user_id = u.id
+      LEFT JOIN badges b ON b.id = ub.badge_id
+      WHERE u.id = $1
+      GROUP BY u.id
+    `, [id]);
+    if (result.rows.length === 0)
+        return null;
+    const row = result.rows[0];
+    return {
         ...row,
         badges: Array.isArray(row.badges) ? row.badges : []
-    }));
+    };
 }
 export async function listUserIdsByInternalNote(note, limit = 200) {
     const result = await db.query(`

@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "../lib/api";
 import type { Server } from "../types";
 import { ServerCard } from "../components/ServerCard";
@@ -9,42 +10,42 @@ type HomeResponse = { servers: Server[] };
 export function HomePage(): JSX.Element {
   const location = useLocation();
   const [search, setSearch] = useState("");
-  const [servers, setServers] = useState<Server[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function loadServers(nextSearch?: string): Promise<void> {
-    setLoading(true);
-    setError(null);
-    try {
-      const query = nextSearch?.trim() ? `?search=${encodeURIComponent(nextSearch.trim())}` : "";
-      const data = await apiRequest<HomeResponse>(`/servers${query}`);
-      setServers(data.servers);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de charger les serveurs.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [activeSearch, setActiveSearch] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const initialSearch = params.get("search") ?? "";
-    if (initialSearch) {
-      setSearch(initialSearch);
-      void loadServers(initialSearch);
-      return;
-    }
-    void loadServers();
+    setSearch(initialSearch);
+    setActiveSearch(initialSearch);
   }, [location.search]);
+
+  const {
+    data: serversData,
+    isLoading: loading,
+    error: queryError
+  } = useQuery({
+    queryKey: ["servers", activeSearch],
+    queryFn: () => {
+      const query = activeSearch.trim() ? `?search=${encodeURIComponent(activeSearch.trim())}` : "";
+      return apiRequest<HomeResponse>(`/servers${query}`);
+    }
+  });
+
+  const servers = serversData?.servers ?? [];
+  const error = queryError ? (queryError instanceof Error ? queryError.message : "Impossible de charger les serveurs.") : null;
 
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    void loadServers(search);
+    setActiveSearch(search);
   }
 
-  const promotedServers = servers.filter((s) => s.premium_type === "quokka_plus" || s.premium_type === "essentiel");
-  const regularServers = servers.filter((s) => !s.premium_type);
+  const promotedServers = useMemo(() => {
+    return servers.filter((s) => s.premium_type === "quokka_plus" || s.premium_type === "essentiel");
+  }, [servers]);
+
+  const regularServers = useMemo(() => {
+    return servers.filter((s) => !s.premium_type);
+  }, [servers]);
 
   return (
     <section className="page home-page home-page-v2">

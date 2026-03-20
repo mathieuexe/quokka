@@ -18,7 +18,10 @@ export async function listPromoCodes() {
     `);
     return result.rows;
 }
-export async function listPromoCodesWithTargets() {
+export async function listPromoCodesWithTargets(page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const countResult = await db.query("SELECT COUNT(*) as count FROM promo_codes");
+    const total = parseInt(countResult.rows[0].count, 10);
     const result = await db.query(`
       SELECT
         p.id,
@@ -38,8 +41,15 @@ export async function listPromoCodesWithTargets() {
       LEFT JOIN users u ON u.id = p.user_id
       LEFT JOIN servers s ON s.id = p.server_id
       ORDER BY p.created_at DESC
-    `);
-    return result.rows;
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+    return {
+        data: result.rows,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }
 export async function createPromoCode(input) {
     const result = await db.query(`

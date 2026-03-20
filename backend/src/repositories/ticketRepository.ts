@@ -46,7 +46,15 @@ export type AdminTicketFilters = {
   search?: string;
 };
 
-export async function listUserTickets(userId: string): Promise<TicketRecord[]> {
+export async function listUserTickets(userId: string, page: number = 1, limit: number = 20): Promise<PaginatedResult<TicketRecord>> {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM tickets WHERE user_id = $1`,
+    [userId]
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const result = await db.query<TicketRecord>(
     `
       SELECT
@@ -74,13 +82,24 @@ export async function listUserTickets(userId: string): Promise<TicketRecord[]> {
       LEFT JOIN servers s ON s.id = t.server_id
       WHERE t.user_id = $1
       ORDER BY t.last_message_at DESC
+      LIMIT $2 OFFSET $3
     `,
-    [userId]
+    [userId, limit, offset]
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
-export async function listAdminTickets(filters: AdminTicketFilters): Promise<TicketRecord[]> {
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listAdminTickets(filters: AdminTicketFilters, page: number = 1, limit: number = 20): Promise<PaginatedResult<TicketRecord>> {
+  const offset = (page - 1) * limit;
   const values: Array<string | number> = [];
   const conditions: string[] = [];
 
@@ -119,6 +138,21 @@ export async function listAdminTickets(filters: AdminTicketFilters): Promise<Tic
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
+  const countValues = [...values];
+  const countResult = await db.query<{ count: string }>(
+    `
+      SELECT COUNT(*) as count
+      FROM tickets t
+      JOIN users u ON u.id = t.user_id
+      ${whereClause}
+    `,
+    countValues
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  values.push(limit);
+  values.push(offset);
+
   const result = await db.query<TicketRecord>(
     `
       SELECT
@@ -146,10 +180,18 @@ export async function listAdminTickets(filters: AdminTicketFilters): Promise<Tic
       LEFT JOIN servers s ON s.id = t.server_id
       ${whereClause}
       ORDER BY t.last_message_at DESC
+      LIMIT $${values.length - 1} OFFSET $${values.length}
     `,
     values
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function getTicketById(ticketId: string): Promise<TicketRecord | null> {

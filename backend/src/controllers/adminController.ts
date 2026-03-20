@@ -35,7 +35,8 @@ import {
   findUserById,
   deleteUser,
   listUserIpEvents,
-  hasDiscordAccount
+  hasDiscordAccount,
+  getAdminUserById
 } from "../repositories/userRepository.js";
 import { createGiftedStripePayment, listAllStripePayments } from "../repositories/paymentRepository.js";
 import { createPromoCode, listPromoCodesWithTargets, setPromoCodeActive } from "../repositories/promoCodeRepository.js";
@@ -330,29 +331,53 @@ const adminServerParamsSchema = z.object({
   serverId: z.string().uuid()
 });
 
-export async function getAdminUsers(_req: Request, res: Response): Promise<void> {
-  const [users, availableBadges] = await Promise.all([listUsers(), listAvailableBadges()]);
-  const usersWithReference = users.map((user) => ({
+import { paginationSchema } from "../types/pagination.js";
+
+export async function getAdminUsers(req: Request, res: Response): Promise<void> {
+  const { page, limit } = paginationSchema.parse(req.query);
+  const [usersPaginated, availableBadges] = await Promise.all([listUsers(page, limit), listAvailableBadges()]);
+  const usersWithReference = usersPaginated.data.map((user) => ({
     ...user,
     customer_reference: generateCustomerReference(user.pseudo, user.id)
   }));
-  res.json({ users: usersWithReference, availableBadges });
+  res.json({
+    data: usersWithReference,
+    total: usersPaginated.total,
+    page: usersPaginated.page,
+    limit: usersPaginated.limit,
+    totalPages: usersPaginated.totalPages,
+    availableBadges
+  });
 }
 
 export async function getAdminServers(req: Request, res: Response): Promise<void> {
+  const { page, limit } = paginationSchema.parse(req.query);
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
-  const servers = await listServersByPriority(search);
-  const fakeIds = await listFakeServerIdsByServerIds(servers.map((server) => server.id));
-  const serversWithFakeFlag = servers.map((server) => ({
+  const serversPaginated = await listServersByPriority(search, page, limit);
+  const fakeIds = await listFakeServerIdsByServerIds(serversPaginated.data.map((server) => server.id));
+  const serversWithFakeFlag = serversPaginated.data.map((server) => ({
     ...server,
     is_fake: fakeIds.has(server.id)
   }));
-  res.json({ servers: serversWithFakeFlag });
+  res.json({
+    data: serversWithFakeFlag,
+    total: serversPaginated.total,
+    page: serversPaginated.page,
+    limit: serversPaginated.limit,
+    totalPages: serversPaginated.totalPages
+  });
 }
 
-export async function getAdminSubscriptions(_req: Request, res: Response): Promise<void> {
-  const subscriptions = await listAllSubscriptions();
-  res.json({ subscriptions });
+export async function getAdminSubscriptions(req: Request, res: Response): Promise<void> {
+  const { page, limit } = paginationSchema.parse(req.query);
+  const subscriptionsPaginated = await listAllSubscriptions(page, limit);
+  res.json({
+    data: subscriptionsPaginated.data,
+    total: subscriptionsPaginated.total,
+    page: subscriptionsPaginated.page,
+    limit: subscriptionsPaginated.limit,
+    totalPages: subscriptionsPaginated.totalPages
+  });
 }
 
 export async function getAdminNotifications(req: Request, res: Response): Promise<void> {
@@ -364,15 +389,15 @@ export async function getAdminNotifications(req: Request, res: Response): Promis
 
 export async function getAdminUserDetails(req: Request, res: Response): Promise<void> {
   const params = adminUserParamsSchema.parse(req.params);
-  const [users, servers, availableBadges, subscriptions, emailEvents, ipEvents] = await Promise.all([
-    listUsers(),
+  const [user, servers, availableBadges, subscriptions, emailEvents, ipEvents] = await Promise.all([
+    getAdminUserById(params.userId),
     listServersByUser(params.userId),
     listAvailableBadges(),
     listUserSubscriptions(params.userId),
     listUserEmailEvents(params.userId),
     listUserIpEvents(params.userId, 200)
   ]);
-  const user = users.find((entry) => entry.id === params.userId);
+  
   if (!user) {
     res.status(404).json({ message: "Utilisateur introuvable." });
     return;
@@ -397,9 +422,16 @@ export async function getAdminUserDetails(req: Request, res: Response): Promise<
   });
 }
 
-export async function getAdminPromoCodes(_req: Request, res: Response): Promise<void> {
-  const promoCodes = await listPromoCodesWithTargets();
-  res.json({ promoCodes });
+export async function getAdminPromoCodes(req: Request, res: Response): Promise<void> {
+  const { page, limit } = paginationSchema.parse(req.query);
+  const promoCodesPaginated = await listPromoCodesWithTargets(page, limit);
+  res.json({
+    data: promoCodesPaginated.data,
+    total: promoCodesPaginated.total,
+    page: promoCodesPaginated.page,
+    limit: promoCodesPaginated.limit,
+    totalPages: promoCodesPaginated.totalPages
+  });
 }
 
 export async function postAdminPromoCode(req: Request, res: Response): Promise<void> {
@@ -433,11 +465,15 @@ export async function patchAdminPromoCodeActive(req: Request, res: Response): Pr
   res.status(204).send();
 }
 
-export async function getAdminBilling(_req: Request, res: Response): Promise<void> {
-  const [subscriptions, payments] = await Promise.all([listAllSubscriptions(), listAllStripePayments()]);
+export async function getAdminBilling(req: Request, res: Response): Promise<void> {
+  const { page, limit } = paginationSchema.parse(req.query);
+  const [subscriptionsPaginated, paymentsPaginated] = await Promise.all([
+    listAllSubscriptions(page, limit),
+    listAllStripePayments(page, limit)
+  ]);
   const now = Date.now();
 
-  const subscriptionsWithStatus = subscriptions.map((subscription) => {
+  const subscriptionsWithStatus = subscriptionsPaginated.data.map((subscription) => {
     const lifecycleStatus = new Date(subscription.end_date).getTime() >= now ? "active" : "terminated";
     return {
       ...subscription,
@@ -445,7 +481,13 @@ export async function getAdminBilling(_req: Request, res: Response): Promise<voi
     };
   });
 
-  res.json({ subscriptions: subscriptionsWithStatus, payments });
+  res.json({
+    subscriptions: {
+      ...subscriptionsPaginated,
+      data: subscriptionsWithStatus
+    },
+    payments: paymentsPaginated
+  });
 }
 
 export async function promoteServer(req: Request, res: Response): Promise<void> {
@@ -802,9 +844,16 @@ export async function deleteFakeData(_req: Request, res: Response): Promise<void
 }
 
 export async function getAdminCertifications(req: Request, res: Response): Promise<void> {
+  const { page, limit } = paginationSchema.parse(req.query);
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
-  const requests = await listCertificationRequests(status);
-  res.json({ requests });
+  const requestsPaginated = await listCertificationRequests(status, page, limit);
+  res.json({
+    data: requestsPaginated.data,
+    total: requestsPaginated.total,
+    page: requestsPaginated.page,
+    limit: requestsPaginated.limit,
+    totalPages: requestsPaginated.totalPages
+  });
 }
 
 export async function acceptAdminCertification(req: Request, res: Response): Promise<void> {

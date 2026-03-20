@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -58,15 +58,19 @@ export function Header({ variant = "default", branding }: HeaderProps): JSX.Elem
     return base;
   }, [isAdmin, isAuthenticated, t]);
 
-  function closeMenus(): void {
+  const closeMenus = useCallback(() => {
     setProfileOpen(false);
     setMobileOpen(false);
-  }
+  }, []);
 
-  function handleLogout(): void {
+  const handleLogout = useCallback(() => {
     closeMenus();
     logout();
-  }
+  }, [closeMenus, logout]);
+
+  const toggleProfileOpen = useCallback(() => setProfileOpen((current) => !current), []);
+  const toggleMobileOpen = useCallback(() => setMobileOpen((current) => !current), []);
+  const stopPropagation = useCallback((event: React.MouseEvent) => event.stopPropagation(), []);
 
   return (
     <header className={`site-header ${variant === "home" ? "site-header--home" : ""}`}>
@@ -110,7 +114,7 @@ export function Header({ variant = "default", branding }: HeaderProps): JSX.Elem
                 aria-label={t("header.openProfileMenu")}
                 aria-expanded={profileOpen}
                 aria-haspopup="menu"
-                onClick={() => setProfileOpen((current) => !current)}
+                onClick={toggleProfileOpen}
               >
                 {user?.avatar_url ? (
                   <img className="site-header-avatar" src={user.avatar_url} alt={t("header.avatarAlt", { pseudo: user.pseudo })} />
@@ -162,7 +166,7 @@ export function Header({ variant = "default", branding }: HeaderProps): JSX.Elem
             type="button"
             aria-label={mobileOpen ? t("header.closeMenu") : t("header.openMenu")}
             aria-expanded={mobileOpen}
-            onClick={() => setMobileOpen((current) => !current)}
+            onClick={toggleMobileOpen}
           >
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -171,7 +175,7 @@ export function Header({ variant = "default", branding }: HeaderProps): JSX.Elem
 
       {mobileOpen && (
         <div className="site-header-mobile-overlay" role="presentation" onClick={closeMenus}>
-          <div className="site-header-mobile-drawer" role="dialog" aria-label={t("header.menu")} onClick={(event) => event.stopPropagation()}>
+          <div className="site-header-mobile-drawer" role="dialog" aria-label={t("header.menu")} onClick={stopPropagation}>
             <nav className="site-header-mobile-nav" aria-label={t("header.navigation")}>
               {navItems.map((item) => (
                 <NavLink

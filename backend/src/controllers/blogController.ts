@@ -111,9 +111,18 @@ export async function deleteAdminBlogCategory(req: Request, res: Response): Prom
   res.json({ message: "Catégorie supprimée." });
 }
 
+import { paginationSchema } from "../types/pagination.js";
+
 export async function getAdminBlogPosts(req: Request, res: Response): Promise<void> {
-  const posts = await listBlogPostsAdmin();
-  res.json({ posts });
+  const { page, limit } = paginationSchema.parse(req.query);
+  const postsPaginated = await listBlogPostsAdmin(page, limit);
+  res.json({
+    data: postsPaginated.data,
+    total: postsPaginated.total,
+    page: postsPaginated.page,
+    limit: postsPaginated.limit,
+    totalPages: postsPaginated.totalPages
+  });
 }
 
 export async function postAdminBlogPost(req: Request, res: Response): Promise<void> {
@@ -185,9 +194,16 @@ export async function deleteAdminBlogPost(req: Request, res: Response): Promise<
 }
 
 export async function getPublicBlogPosts(req: Request, res: Response): Promise<void> {
-  const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
-  const posts = await listPublishedBlogPosts(category || undefined);
-  res.json({ posts });
+  const categorySlug = typeof req.query.category === "string" ? req.query.category : undefined;
+  const { page, limit } = paginationSchema.parse(req.query);
+  const postsPaginated = await listPublishedBlogPosts(categorySlug, page, limit);
+  res.json({
+    data: postsPaginated.data,
+    total: postsPaginated.total,
+    page: postsPaginated.page,
+    limit: postsPaginated.limit,
+    totalPages: postsPaginated.totalPages
+  });
 }
 
 export async function getPublicBlogPost(req: Request, res: Response): Promise<void> {

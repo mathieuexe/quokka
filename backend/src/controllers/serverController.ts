@@ -68,24 +68,36 @@ function isImgurUrl(url: string): boolean {
   }
 }
 
+import { paginationSchema } from "../types/pagination.js";
+
 export async function getHomeServers(req: Request, res: Response): Promise<void> {
   try {
     await ensureMonthlyLikesReset();
+    const { page, limit } = paginationSchema.parse(req.query);
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
-    const cacheKey = search ? `home_servers_${search}` : "home_servers";
-    
+    const cacheKey = search ? `home_servers_${search}_${page}_${limit}` : `home_servers_${page}_${limit}`;
+
     const cachedServers = serverCache.get(cacheKey);
     if (cachedServers) {
-      res.json({ servers: cachedServers });
+      res.json(cachedServers);
       return;
     }
 
-    const servers = await listServersByPriority(search);
-    serverCache.set(cacheKey, servers);
-    res.json({ servers });
+    const serversPaginated = await listServersByPriority(search, page, limit);
+    
+    const responseData = {
+      data: serversPaginated.data,
+      total: serversPaginated.total,
+      page: serversPaginated.page,
+      limit: serversPaginated.limit,
+      totalPages: serversPaginated.totalPages
+    };
+    
+    serverCache.set(cacheKey, responseData);
+    res.json(responseData);
   } catch (error) {
-    console.error("Home servers load failed:", error);
-    res.json({ servers: [] });
+    console.error("Error fetching servers:", error);
+    res.json({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
   }
 }
 

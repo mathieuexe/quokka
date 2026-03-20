@@ -503,7 +503,14 @@ export async function updateProfile(
   );
 }
 
-export async function listUsers(): Promise<AdminUserRecord[]> {
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listUsers(page: number = 1, limit: number = 20): Promise<PaginatedResult<AdminUserRecord>> {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>("SELECT COUNT(*) as count FROM users");
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const result = await db.query<
     Omit<AdminUserRecord, "badges"> & {
       badges: unknown;
@@ -541,13 +548,72 @@ export async function listUsers(): Promise<AdminUserRecord[]> {
       LEFT JOIN badges b ON b.id = ub.badge_id
       GROUP BY u.id
       ORDER BY u.created_at DESC
-    `
+      LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
 
-  return result.rows.map((row) => ({
+  return {
+    data: result.rows.map((row) => ({
+      ...row,
+      badges: Array.isArray(row.badges) ? (row.badges as UserBadge[]) : []
+    })),
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
+}
+
+export async function getAdminUserById(id: string): Promise<AdminUserRecord | null> {
+  const result = await db.query<
+    Omit<AdminUserRecord, "badges"> & {
+      badges: unknown;
+    }
+  >(
+    `
+      SELECT
+        u.id,
+        u.pseudo,
+        u.email,
+        u.bio,
+        u.internal_note,
+        u.avatar_url,
+        u.role,
+        u.created_at,
+        u.email_verified,
+        u.two_factor_enabled,
+        u.language,
+        u.balance_cents,
+        u.last_balance_update,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', b.id,
+              'slug', b.slug,
+              'label', b.label,
+              'image_url', b.image_url
+            )
+            ORDER BY ${BADGE_DISPLAY_ORDER_SQL_WITH_ALIAS}, b.label ASC
+          ) FILTER (WHERE b.id IS NOT NULL),
+          '[]'::json
+        ) AS badges
+      FROM users u
+      LEFT JOIN user_badges ub ON ub.user_id = u.id
+      LEFT JOIN badges b ON b.id = ub.badge_id
+      WHERE u.id = $1
+      GROUP BY u.id
+    `,
+    [id]
+  );
+
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
     ...row,
     badges: Array.isArray(row.badges) ? (row.badges as UserBadge[]) : []
-  }));
+  };
 }
 
 export async function listUserIdsByInternalNote(note: string, limit: number = 200): Promise<string[]> {

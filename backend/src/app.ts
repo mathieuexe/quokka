@@ -40,10 +40,14 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(compression());
+app.use(compression({ level: 6 }));
 app.post("/api/payments/webhook", express.raw({ type: "application/json" }), stripeWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(maintenanceGuard);
+
+import { publicLimiter } from "./middlewares/rateLimiter.middleware.js";
+app.use("/api", publicLimiter);
+
 app.use("/uploads", express.static(join(process.cwd(), "uploads"), { maxAge: "7d", immutable: true }));
 app.get("/discord/callback", handleDiscordCallback);
 app.post("/discord/callback", handleDiscordCallback);

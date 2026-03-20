@@ -50,7 +50,10 @@ export async function createPendingStripePayment(input) {
         input.amountCents
     ]);
 }
-export async function listUserStripePayments(userId) {
+export async function listUserStripePayments(userId, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const countResult = await db.query(`SELECT COUNT(*) as count FROM stripe_payments WHERE user_id = $1`, [userId]);
+    const total = parseInt(countResult.rows[0].count, 10);
     const queryWithPromo = `
       SELECT
         p.id,
@@ -84,6 +87,7 @@ export async function listUserStripePayments(userId) {
       LEFT JOIN stripe_payment_promos m ON m.checkout_session_id = p.checkout_session_id
       WHERE p.user_id = $1
       ORDER BY p.created_at DESC
+      LIMIT $2 OFFSET $3
     `;
     const queryWithoutPromo = `
       SELECT
@@ -113,17 +117,18 @@ export async function listUserStripePayments(userId) {
       JOIN servers s ON s.id = p.server_id
       WHERE p.user_id = $1
       ORDER BY p.created_at DESC
+      LIMIT $2 OFFSET $3
     `;
     let result;
     try {
-        result = await db.query(queryWithPromo, [userId]);
+        result = await db.query(queryWithPromo, [userId, limit, offset]);
     }
     catch (error) {
         if (!isMissingRelationError(error))
             throw error;
-        result = await db.query(queryWithoutPromo, [userId]);
+        result = await db.query(queryWithoutPromo, [userId, limit, offset]);
     }
-    return result.rows.map((row) => ({
+    const mapped = result.rows.map((row) => ({
         ...row,
         promo: row.base_amount_cents !== undefined
             ? {
@@ -135,6 +140,13 @@ export async function listUserStripePayments(userId) {
             : null,
         order_reference: generateOrderReference(row.id)
     }));
+    return {
+        data: mapped,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }
 export async function getUserStripePaymentById(paymentId, userId) {
     const queryWithPromo = `
@@ -385,7 +397,10 @@ export async function createGiftedStripePayment(input) {
     ]);
     return { checkoutSessionId, paymentId: result.rows[0]?.id ?? checkoutSessionId };
 }
-export async function listAllStripePayments() {
+export async function listAllStripePayments(page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const countResult = await db.query(`SELECT COUNT(*) as count FROM stripe_payments`);
+    const total = parseInt(countResult.rows[0].count, 10);
     const result = await db.query(`
       SELECT
         p.id,
@@ -408,6 +423,13 @@ export async function listAllStripePayments() {
       JOIN users u ON u.id = p.user_id
       JOIN servers s ON s.id = p.server_id
       ORDER BY p.created_at DESC
-    `);
-    return result.rows;
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+    return {
+        data: result.rows,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }

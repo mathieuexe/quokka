@@ -5,6 +5,7 @@ import { extname, join } from "path";
 import { randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import { requireAuth } from "../middleware/auth.js";
+import { standardLimiter } from "../middlewares/rateLimiter.middleware.js";
 import {
   getUserTicket,
   getUserTickets,
@@ -40,8 +41,8 @@ const upload = multer({
   }
 });
 
-ticketRoutes.post("/attachments", upload.array("files"), postTicketAttachments);
+ticketRoutes.post("/attachments", standardLimiter, upload.array("files"), postTicketAttachments);
 ticketRoutes.get("/", getUserTickets);
-ticketRoutes.post("/", postUserTicket);
+ticketRoutes.post("/", standardLimiter, postUserTicket);
 ticketRoutes.get("/:ticketId", getUserTicket);
-ticketRoutes.post("/:ticketId/messages", postUserTicketMessage);
+ticketRoutes.post("/:ticketId/messages", standardLimiter, postUserTicketMessage);

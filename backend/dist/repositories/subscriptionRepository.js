@@ -36,7 +36,10 @@ export async function createSubscriptionRange(input) {
       VALUES ($1, $2, $3, $4)
     `, [input.serverId, input.type, input.startDate.toISOString(), input.endDate.toISOString()]);
 }
-export async function listAllSubscriptions() {
+export async function listAllSubscriptions(page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const countResult = await db.query("SELECT COUNT(*) as count FROM subscriptions");
+    const total = parseInt(countResult.rows[0].count, 10);
     const result = await db.query(`
       SELECT
         sub.id,
@@ -51,8 +54,15 @@ export async function listAllSubscriptions() {
       JOIN servers s ON s.id = sub.server_id
       JOIN users u ON u.id = s.user_id
       ORDER BY sub.created_at DESC
-    `);
-    return result.rows;
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+    return {
+        data: result.rows,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }
 export async function deleteSubscription(subscriptionId) {
     await db.query("DELETE FROM subscriptions WHERE id = $1", [subscriptionId]);

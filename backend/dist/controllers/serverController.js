@@ -1,4 +1,5 @@
 import { z } from "zod";
+import NodeCache from "node-cache";
 import { createServer, deleteServer, getCategoryById, getServerById, getServerOwner, increaseView, listCategories, listServersByPriority, updateServer } from "../repositories/serverRepository.js";
 import { createCertificationRequest, getLatestCertificationRequestByServer } from "../repositories/certificationRepository.js";
 import { ensureMonthlyLikesReset, VoteRuleError, voteForServer } from "../repositories/voteRepository.js";
@@ -34,6 +35,8 @@ const certificationRequestSchema = z.object({
     attachments: z.array(z.string().url()).optional()
 });
 const COMMUNITY_SLUGS = new Set(["discord", "stoat", "habbo"]);
+// Cache for heavy requests (1 minute TTL)
+const serverCache = new NodeCache({ stdTTL: 60 });
 function isImgurUrl(url) {
     try {
         const parsed = new URL(url);
@@ -48,21 +51,44 @@ function isImgurUrl(url) {
         return false;
     }
 }
+import { paginationSchema } from "../types/pagination.js";
 export async function getHomeServers(req, res) {
     try {
         await ensureMonthlyLikesReset();
+        const { page, limit } = paginationSchema.parse(req.query);
         const search = typeof req.query.search === "string" ? req.query.search : undefined;
-        const servers = await listServersByPriority(search);
-        res.json({ servers });
+        const cacheKey = search ? `home_servers_${search}_${page}_${limit}` : `home_servers_${page}_${limit}`;
+        const cachedServers = serverCache.get(cacheKey);
+        if (cachedServers) {
+            res.json(cachedServers);
+            return;
+        }
+        const serversPaginated = await listServersByPriority(search, page, limit);
+        const responseData = {
+            data: serversPaginated.data,
+            total: serversPaginated.total,
+            page: serversPaginated.page,
+            limit: serversPaginated.limit,
+            totalPages: serversPaginated.totalPages
+        };
+        serverCache.set(cacheKey, responseData);
+        res.json(responseData);
     }
     catch (error) {
-        console.error("Home servers load failed:", error);
-        res.json({ servers: [] });
+        console.error("Error fetching servers:", error);
+        res.json({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
     }
 }
 export async function getCategories(_req, res) {
     try {
+        const cacheKey = "categories";
+        const cachedCategories = serverCache.get(cacheKey);
+        if (cachedCategories) {
+            res.json({ categories: cachedCategories });
+            return;
+        }
         const categories = await listCategories();
+        serverCache.set(cacheKey, categories, 3600); // cache categories longer (1 hour)
         res.json({ categories });
     }
     catch (error) {
@@ -102,6 +128,7 @@ export async function voteServer(req, res) {
     const serverId = z.string().uuid().parse(req.params.serverId);
     try {
         const likes = await voteForServer(serverId, userId);
+        serverCache.flushAll(); // Clear cache when a vote happens
         res.json({ message: "Vote enregistré.", likes });
     }
     catch (error) {
@@ -239,6 +266,7 @@ export async function patchServer(req, res) {
         bannerUrl: payload.bannerUrl || undefined,
         isPublic: payload.isPublic
     });
+    serverCache.flushAll(); // Clear cache when a server is updated
     res.json({ message: "Serveur mis à jour." });
 }
 export async function removeServer(req, res) {
@@ -258,6 +286,7 @@ export async function removeServer(req, res) {
         return;
     }
     await deleteServer(serverId);
+    serverCache.flushAll(); // Clear cache when a server is deleted
     res.status(204).send();
 }
 export async function getCertificationStatus(req, res) {

@@ -28,11 +28,17 @@ export default defineConfig({
     })
   ],
   build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
           "react-vendor": ["react", "react-dom", "react-router-dom"],
-          i18n: ["i18next", "react-i18next", "i18next-browser-languagedetector"]
+          "i18n-vendor": ["i18next", "react-i18next", "i18next-browser-languagedetector"],
+          "icons": ["lucide-react"],
+          "pages-admin": ["./src/admin/AdminLayout.tsx", "./src/admin/AdminUsersPage.tsx", "./src/admin/AdminServersPage.tsx"],
+          "pages-public": ["./src/pages/HomePage.tsx", "./src/pages/ServerPage.tsx"]
         }
       }
     }

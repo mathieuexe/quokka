@@ -41,7 +41,14 @@ export async function listPromoCodes(): Promise<PromoCodeRecord[]> {
   return result.rows;
 }
 
-export async function listPromoCodesWithTargets(): Promise<PromoCodeWithTargetsRecord[]> {
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listPromoCodesWithTargets(page: number = 1, limit: number = 20): Promise<PaginatedResult<PromoCodeWithTargetsRecord>> {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>("SELECT COUNT(*) as count FROM promo_codes");
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const result = await db.query<PromoCodeWithTargetsRecord>(
     `
       SELECT
@@ -62,9 +69,18 @@ export async function listPromoCodesWithTargets(): Promise<PromoCodeWithTargetsR
       LEFT JOIN users u ON u.id = p.user_id
       LEFT JOIN servers s ON s.id = p.server_id
       ORDER BY p.created_at DESC
-    `
+      LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function createPromoCode(input: {

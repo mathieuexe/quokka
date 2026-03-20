@@ -186,14 +186,24 @@ function generateTicketReference(): string {
   return `TKT-${String(value).padStart(6, "0")}`;
 }
 
+import { paginationSchema } from "../types/pagination.js";
+
 export async function getUserTickets(req: Request, res: Response): Promise<void> {
   const userId = req.user?.sub;
   if (!userId) {
     res.status(401).json({ message: "Authentification requise." });
     return;
   }
-  const tickets = await listUserTickets(userId);
-  res.json({ tickets });
+
+  const { page, limit } = paginationSchema.parse(req.query);
+  const ticketsPaginated = await listUserTickets(userId, page, limit);
+  res.json({
+    data: ticketsPaginated.data,
+    total: ticketsPaginated.total,
+    page: ticketsPaginated.page,
+    limit: ticketsPaginated.limit,
+    totalPages: ticketsPaginated.totalPages
+  });
 }
 
 export async function getUserTicket(req: Request, res: Response): Promise<void> {
@@ -343,7 +353,10 @@ export async function getAdminTickets(req: Request, res: Response): Promise<void
     res.status(400).json({ message: "Statut invalide." });
     return;
   }
-  const tickets = await listAdminTickets({
+
+  const { page, limit } = paginationSchema.parse(req.query);
+
+  const ticketsPaginated = await listAdminTickets({
     status: query.status,
     adminUserId: query.adminUserId,
     userId: query.userId,
@@ -351,8 +364,14 @@ export async function getAdminTickets(req: Request, res: Response): Promise<void
     to: query.to,
     priority: query.priority,
     search: query.search
+  }, page, limit);
+  res.json({
+    data: ticketsPaginated.data,
+    total: ticketsPaginated.total,
+    page: ticketsPaginated.page,
+    limit: ticketsPaginated.limit,
+    totalPages: ticketsPaginated.totalPages
   });
-  res.json({ tickets });
 }
 
 export async function postAdminTicket(req: Request, res: Response): Promise<void> {

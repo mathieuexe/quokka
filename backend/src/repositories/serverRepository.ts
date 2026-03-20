@@ -106,7 +106,10 @@ const BASE_SERVER_QUERY = `
   LEFT JOIN stats st ON st.server_id = s.id
 `;
 
-export async function listServersByPriority(search?: string): Promise<ServerRecord[]> {
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listServersByPriority(search?: string, page: number = 1, limit: number = 20): Promise<PaginatedResult<ServerRecord>> {
+  const offset = (page - 1) * limit;
   const params: unknown[] = [];
   const clauses = ["s.is_visible = true"];
   if (search?.trim()) {
@@ -115,6 +118,17 @@ export async function listServersByPriority(search?: string): Promise<ServerReco
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  // Count total
+  const countParams = [...params];
+  const countResult = await db.query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM servers s ${where}`,
+    countParams
+  );
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  params.push(limit);
+  params.push(offset);
 
   const result = await db.query<ServerRecord>(
     `
@@ -130,11 +144,18 @@ export async function listServersByPriority(search?: string): Promise<ServerReco
         COALESCE(st.views, 0) DESC,
         COALESCE(st.visits, 0) DESC,
         s.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `,
     params
   );
 
-  return result.rows;
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function listServersByUser(userId: string): Promise<ServerRecord[]> {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
@@ -9,7 +9,7 @@ type ServerCardProps = {
   categoryLogoUrl?: string;
 };
 
-export function ServerCard({ server, categoryLogoUrl }: ServerCardProps): JSX.Element {
+export const ServerCard = memo(function ServerCard({ server, categoryLogoUrl }: ServerCardProps): JSX.Element {
   const { token, isAuthenticated } = useAuth();
   const premiumLabel = server.premium_type === "quokka_plus" ? "Quokka+" : server.premium_type === "essentiel" ? "Essentiel" : null;
   const [copied, setCopied] = useState(false);

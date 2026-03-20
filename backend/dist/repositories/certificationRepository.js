@@ -25,13 +25,25 @@ export async function getLatestCertificationRequestByServer(serverId) {
     `, [serverId]);
     return result.rows[0] ?? null;
 }
-export async function listCertificationRequests(status) {
+export async function listCertificationRequests(status, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
     const params = [];
     let where = "";
     if (status) {
         params.push(status);
         where = "WHERE cr.status = $1";
     }
+    const countParams = [...params];
+    const countResult = await db.query(`
+      SELECT COUNT(*) as count 
+      FROM server_certification_requests cr
+      JOIN servers s ON s.id = cr.server_id
+      JOIN users u ON u.id = cr.user_id
+      ${where}
+    `, countParams);
+    const total = parseInt(countResult.rows[0].count, 10);
+    params.push(limit);
+    params.push(offset);
     const result = await db.query(`
       SELECT 
         cr.*,
@@ -43,8 +55,15 @@ export async function listCertificationRequests(status) {
       JOIN users u ON u.id = cr.user_id
       ${where}
       ORDER BY cr.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `, params);
-    return result.rows;
+    return {
+        data: result.rows,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
 }
 export async function getCertificationRequestById(id) {
     const result = await db.query(`

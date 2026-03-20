@@ -83,8 +83,10 @@ export async function createSubscriptionRange(input: {
   );
 }
 
-export async function listAllSubscriptions(): Promise<
-  Array<{
+import { PaginatedResult } from "../types/pagination.js";
+
+export async function listAllSubscriptions(page: number = 1, limit: number = 20): Promise<
+  PaginatedResult<{
     id: string;
     server_id: string;
     server_name: string;
@@ -95,6 +97,11 @@ export async function listAllSubscriptions(): Promise<
     premium_slot: number | null;
   }>
 > {
+  const offset = (page - 1) * limit;
+
+  const countResult = await db.query<{ count: string }>("SELECT COUNT(*) as count FROM subscriptions");
+  const total = parseInt(countResult.rows[0].count, 10);
+
   const result = await db.query<{
     id: string;
     server_id: string;
@@ -119,10 +126,18 @@ export async function listAllSubscriptions(): Promise<
       JOIN servers s ON s.id = sub.server_id
       JOIN users u ON u.id = s.user_id
       ORDER BY sub.created_at DESC
-    `
+      LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
 
-  return result.rows;
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
 }
 
 export async function deleteSubscription(subscriptionId: string): Promise<void> {
