@@ -43,6 +43,9 @@ export function HomePage(): JSX.Element {
     void loadServers(search);
   }
 
+  const promotedServers = servers.filter((s) => s.premium_type === "quokka_plus" || s.premium_type === "essentiel");
+  const regularServers = servers.filter((s) => !s.premium_type);
+
   return (
     <section className="page home-page home-page-v2">
       <div className="home-v2-hero-bleed">
@@ -93,19 +96,33 @@ export function HomePage(): JSX.Element {
         </div>
       </div>
 
+      {promotedServers.length > 0 && !loading && !error && (
+        <section className="home-v2-section" aria-label="Serveurs en promotion">
+          <div className="home-v2-section-head">
+            <div>
+              <h2>🚀 Serveurs en promotion</h2>
+              <p>Découvrez nos serveurs mis en avant</p>
+            </div>
+          </div>
+          <div className="home-v2-server-grid">
+            {promotedServers.map((server) => <ServerCard key={server.id} server={server} />)}
+          </div>
+        </section>
+      )}
+
       <section className="home-v2-section" aria-label="Liste des serveurs">
         <div className="home-v2-section-head">
           <div>
             <h2>Serveurs</h2>
-            <p>{servers.length} résultat(s)</p>
+            <p>{regularServers.length} résultat(s)</p>
           </div>
         </div>
 
         {loading && <p>Chargement...</p>}
         {error && <p className="error-text">{error}</p>}
-        {!loading && !error && servers.length === 0 && <p>Aucun serveur trouvé.</p>}
+        {!loading && !error && regularServers.length === 0 && <p>Aucun serveur trouvé.</p>}
         <div className="home-v2-server-grid">
-          {!loading && !error && servers.map((server) => <ServerCard key={server.id} server={server} />)}
+          {!loading && !error && regularServers.map((server) => <ServerCard key={server.id} server={server} />)}
         </div>
       </section>
 
