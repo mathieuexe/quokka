@@ -110,4 +110,4 @@ export const ServerCard = memo(function ServerCard({ server, categoryLogoUrl }: 
       </div>
     </article>
   );
-}
+});

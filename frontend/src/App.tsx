@@ -201,8 +201,6 @@ function setMetaProperty(property: string, content: string): void {
   element.setAttribute("content", content);
 }
 
-import { MaintenanceBanner } from "./components/MaintenanceBanner";
-
 function setFavicon(url: string): void {
   const trimmed = url.trim();
   if (!trimmed) return;

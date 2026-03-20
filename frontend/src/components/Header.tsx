@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, MouseEvent } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -70,7 +70,7 @@ export function Header({ variant = "default", branding }: HeaderProps): JSX.Elem
 
   const toggleProfileOpen = useCallback(() => setProfileOpen((current) => !current), []);
   const toggleMobileOpen = useCallback(() => setMobileOpen((current) => !current), []);
-  const stopPropagation = useCallback((event: React.MouseEvent) => event.stopPropagation(), []);
+  const stopPropagation = useCallback((event: MouseEvent) => event.stopPropagation(), []);
 
   return (
     <header className={`site-header ${variant === "home" ? "site-header--home" : ""}`}>
