@@ -7,3 +7,5 @@ export function PageLoader(): JSX.Element {
     </div>
   );
 }
+
+export default PageLoader;
